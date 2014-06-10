@@ -37,7 +37,7 @@
 
 <!-- compile sources -->
 <target name="build" depends="gen">
-        <javac debug="true" nowarn="true" srcdir="." includes="**/*.java" excludes="anttask/**,examples/**,testcases/**" 
+        <javac debug="true" nowarn="true" srcdir="." includes="**/*.java" excludes="anttask/**,examples/**,testcases/**,utils/**"
          classpath=".:${tools}/beaver-rt.jar:${tools}/junit.jar"
          includeantruntime="false"/>
 </target>
@@ -170,7 +170,7 @@
 
 <!-- build binaries -->
 <target name="jar" depends="build">
-  <jar destfile="DominoJCompiler.jar" basedir="." includes="**/*.class" excludes="testcases/**,examples/**">
+  <jar destfile="DominoJCompiler.jar" basedir="." includes="**/*.class" excludes="anttask/**,examples/**,testcases/**,utils/**">
     <manifest>
       <attribute name="Main-Class" value="JavaCompiler"/>
     </manifest>

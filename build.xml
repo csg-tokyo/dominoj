@@ -80,9 +80,7 @@
 			<include name="**/*.jadd"/>
 		</fileset>
 		<fileset dir="${DominoJ}">
-			<!--include name="**/*.ast"/-->
 			<include name="**/*.jrag"/>
-			<!--include name="**/*.jadd"/-->
 		</fileset>
   </jastadd>
   <!-- copy library files-->
@@ -182,16 +180,14 @@
 <target name="source">
   <jar destfile="dominoj-compiler-src.jar">
       <!-- DominoJ language extension -->
-                <fileset dir="..">
+                <fileset dir=".">
         <!-- include source file -->
-                    <!--include name="dominoj/**/*.ast"/-->
-                    <include name="dominoj/*.jrag"/>
-                    <include name="dominoj/dominoj/*.java"/>
+                    <include name="${DominoJ}/*.jrag"/>
+                    <include name="${DominoJ}/dominoj/*.java"/>
         <!-- include buildfile -->
-                    <include name="dominoj/*.xml"/>
-        <!-- include readme and script -->
-                    <include name="dominoj/README"/>
-                    <include name="dominoj/dominojc"/>
+                    <include name="${DominoJ}/*.xml"/>
+        <!-- include readme -->
+                    <include name="${DominoJ}/README"/>
                 </fileset>
       <manifest>
       </manifest>

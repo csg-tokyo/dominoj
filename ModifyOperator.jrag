@@ -1,0 +1,376 @@
+/*
+ * Operators for method slots are transformed to method calls at an early stage.
+ */
+
+aspect ModifyOperator {
+
+    /*
+     * add a crossprocess before parseErrors.
+     * the crossprocesses in children are done first.
+     */
+    public void ASTNode.crossprocess() {
+        for(int i=0; i<getNumChild(); i++) {
+            getChild(i).crossprocess();
+        }
+    }
+
+    /*
+     * add a preprocess before collectErrors.
+     * unlike the execution order in collectErrors,
+     * the preprocesses in children are done first.
+     */
+    public void CompilationUnit.collectErrors() {
+        preprocess();
+        super.collectErrors();
+    }
+    public void ASTNode.preprocess() {
+        for(int i=0; i<getNumChild(); i++) {
+            getChild(i).preprocess();
+        }
+    }
+
+    public void AssignSimpleExpr.preprocess() {
+        super.preprocess();
+        if(getSource().type().isUnknown() || getDest().type().isUnknown()) {
+            if(hasValidParameters()) {
+                super.transToMethodCall("$assign");
+                return;
+            }
+        }
+    }
+
+    public void AssignPlusExpr.preprocess() {
+        super.preprocess();
+        if(getSource().type().isUnknown() || getDest().type().isUnknown()) {
+            if(hasValidParameters()) {
+                super.transToMethodCall("$after");
+                return;
+            }
+        }
+    }
+
+    public void AssignMinusExpr.preprocess() {
+        super.preprocess();
+        if(getSource().type().isUnknown() || getDest().type().isUnknown()) {
+            if(hasValidParameters()) {
+                super.transToMethodCall("$remove");
+                return;
+            }
+        }
+    }
+
+    public void AssignXorExpr.preprocess() {
+        super.preprocess();
+        if(getSource().type().isUnknown() || getDest().type().isUnknown()) {
+            if(hasValidParameters()) {
+                super.transToMethodCall("$before");
+                return;
+            }
+        }
+    }
+
+    /*
+     * check if the operands of the AssignExpr are valid.
+     * the method slots at both sides have the same parameters,
+     * or the right one is generic to the left one.
+     */
+    public boolean AssignExpr.hasValidParameters() {
+        TypeDecl ll = null;
+        VarAccess lr = null;
+        TypeDecl rl = null;
+        VarAccess rr = null;
+        // check right-hand side
+        if(getSource() instanceof Dot) {
+            Dot d = (Dot)getSource();
+            TypeDecl td = d.lastDot().getLeft().type();
+            if(td.isClassDecl() || td.isInterfaceDecl())    rl = td;
+            Access a = d.extractLast();
+            if(a instanceof VarAccess)    rr = (VarAccess)a;
+            else if(a instanceof ParseName)    rr = new VarAccess(((ParseName)a).getID());
+        } else if(hostType() instanceof ClassDecl) {
+            // prepend "this"
+            ClassDecl cd = (ClassDecl)hostType();
+            if(!cd.memberFields(getSource().toString()).isEmpty())    return false;
+            ArrayList<MethodDecl> methods = cd.getMemberMethods(getSource().toString());
+            if(!methods.isEmpty()) {
+                rl = cd;
+                rr = new VarAccess(getSource().toString());
+                Access access = null;
+                if(methods.get(0).isStatic())    access = new PackageAccess(cd.name());
+                else    access = new ThisAccess("this");
+                setSource(new Dot(access, rr));
+                flushCache();
+            }
+        }
+        // check left-hand side
+        if(getDest() instanceof Dot) {
+            Dot d = (Dot)getDest();
+            TypeDecl td = d.lastDot().getLeft().type();
+            if(td.isClassDecl() || td.isInterfaceDecl())    ll = td;
+            Access a = d.extractLast();
+            if(a instanceof VarAccess)    lr = (VarAccess)a;
+            else if(a instanceof ParseName)    lr = new VarAccess(((ParseName)a).getID());
+        } else if(hostType() instanceof ClassDecl) {
+            // prepend "this"
+            ClassDecl cd = (ClassDecl)hostType();
+            if(!cd.memberFields(getDest().toString()).isEmpty())    return false;
+            ArrayList<MethodDecl> methods = cd.getMemberMethods(getDest().toString());
+            if(!methods.isEmpty()) {
+                ll = cd;
+                lr = new VarAccess(getDest().toString());
+                Access access = null;
+                if(methods.get(0).isStatic())    access = new PackageAccess(cd.name());
+                else    access = new ThisAccess("this");
+                setDest(new Dot(access, lr));
+                flushCache();
+            }
+        }
+
+        if(ll != null && lr != null && rl != null && rr != null) {
+            if(ll.isClassDecl() && lr.name().equals("constructor")) {
+                ClassDecl cd = (ClassDecl)ll;
+                if(cd.noConstructor())    cd.createEmptyConstructor();
+                cd.generateMethodsByConstructors();
+            }
+            ArrayList<MethodDecl> rms = rl.getMemberMethods(rr.name());
+            ArrayList<MethodDecl> lms = ll.getMemberMethods(lr.name());
+            //System.out.println("hasValidParameters: " + rr.name() + " rms.size() = " + rms.size() + ", " + lr.name() + " lms.size() = " + lms.size());
+            for(int i=0; i<lms.size();i++) {
+                MethodDecl lmd = lms.get(i);
+                for(int j=0; j<rms.size(); j++) {
+                    MethodDecl rmd = rms.get(j);
+                    // the left one should be public unless the right one is in the same class
+                    if(!ll.name().equals(rl.name()) && lmd.isPrivate()) {
+                        System.out.println("the method " + lmd.name()
+                                           + " should be public unless the method " + lmd.name()
+                                           + " is declared in the same class.");
+                    }
+                    // the right one should be public unless the left one is in the same class
+                    if(!ll.name().equals(rl.name()) && rmd.isPrivate()) {
+                        System.out.println("the method " + rmd.name()
+                                           + " should be public unless the method " + lmd.name()
+                                           + " is declared in the same class.");
+                    }
+                    //System.out.println(rmd);
+                    //System.out.println(lmd);
+                    if(rmd.hasSameParameters(lmd)
+                       || rmd.hasGenericParameters(lmd)) {
+                        //System.out.println(rmd.signature() + " -> " + lmd.signature());
+                        return true;
+                    }
+                }
+            }
+            error("the parameters of " + rr.name() + " are not equal to " + lr.name());
+        }
+        return false;
+    }
+
+    /*
+     * transform the AssignExpr into the call to the array handler method
+     */
+    public void AssignExpr.transToMethodCall(String postfix) {
+        // get right side
+        Expr so = null;
+        String sm = null;
+        if(getSource() instanceof Dot) {
+            Dot source = (Dot)getSource();
+            Access last = source.extractLast();
+            if(last instanceof VarAccess) {
+                VarAccess rr = (VarAccess)last;
+                if(rr.decls().isEmpty()) {
+                    so = source.lastDot().getLeft();
+                    sm = rr.name();
+                }
+            }
+        } else {
+            error("cannot recognize source of " + this);
+            return;
+        }
+
+        if(so == null || sm == null) {
+            error("cannot match any method for " + this);
+            return;
+        }
+
+        // get left side
+        Dot dest = null;
+        Expr ll = null;
+        VarAccess lr = null;
+        if(getDest() instanceof Dot) {
+            dest = (Dot)getDest();
+            ll = dest.lastDot().getLeft();
+            Access last = dest.extractLast();
+            if(last instanceof VarAccess)    lr = (VarAccess)last;
+            else if(last instanceof ParseName) {
+                lr = new VarAccess(((ParseName)last).name());
+                dest.replace(last).with(lr);
+            }
+        } else {
+            error("cannot recognize dest of " + this);
+            return;
+        }
+        //System.out.println("dest of " + this + " is "+ dest);
+
+        // check method parameters
+        TypeDecl rh = so.type();
+        if(!rh.isClassDecl() && !rh.isInterfaceDecl()) {
+            error("type of " + so + " is neither a class nor an interface");
+            return;
+        }
+        TypeDecl lh = ll.type();
+        if(!lh.isClassDecl() && !lh.isInterfaceDecl()) {
+            error("type of " + ll + " is neither a class nor an interface");
+            return;
+        }
+
+        // find out all matched pairs
+        ArrayList<MethodDecl> rms = rh.getMemberMethods(sm);
+        ArrayList<MethodDecl> lms = lh.getMemberMethods(lr.name());
+        ArrayList<Pair<MethodDecl, VarAccess>> methods = new ArrayList<Pair<MethodDecl, VarAccess>>();
+        boolean constructor = lr.name().equals("constructor");
+        for(int i=0; i<lms.size();i++) {
+            MethodDecl lmd = lms.get(i);
+            //System.out.println("lmd: " + lmd.signature());
+            if(!constructor) {
+                if(lmd.hostType().compilationUnit().fromSource() && !lmd.done())    lmd.modifyParms();
+                if(!lmd.isDummy())    continue;
+            }
+            if(getSource().toString().equals(getDest().toString())) {
+                methods.add(new Pair<MethodDecl, VarAccess>(lmd, new VarAccess(lmd.methodId(constructor,true)+"$impl$c")));
+            } else {
+                for(int j=0; j<rms.size(); j++) {
+                    MethodDecl rmd = rms.get(j);
+                    //System.out.println("rmd: " + rmd.signature());
+                    if(rmd.hostType().compilationUnit().fromSource() && !rmd.done())    rmd.modifyParms();
+                    if(!rmd.isDummy())    continue;
+                    String sl = rmd.methodId(false,true)+"$c";
+                    if(rh.isInterfaceDecl()) {
+                        sl = rmd.methodId() + "$lc" + rmd.getClosureId();
+                        VarAccess fv = hostType().createLocalFinalVariable(so, (Stmt)getParent());
+                        Expr retStr = new Dot(fv.fullCopy(), new MethodAccess("toString", new List()));
+                        MethodAccess ma = rmd.generateClosureExpr(rmd.name(), rmd.getNumException()>0, false);
+                        VariableDeclaration closure = new Dot(fv, ma).generateClosureSimple(hostType(), sl, retStr, !rmd.isVoid());
+                        ASTNode parent = getParent();    // ExprStmt
+                        ASTNode grand = parent.getParent();
+                        grand.insertChild(closure, grand.getIndexOfChild(parent));
+                        grand.flushCache();
+                    }
+                    if(rmd.hasGenericParameters(lmd)) {
+                        if(postfix.equals("$before"))
+                            methods.add(0, new Pair<MethodDecl, VarAccess>(lmd, new VarAccess(sl)));
+                        else
+                            methods.add(new Pair<MethodDecl, VarAccess>(lmd, new VarAccess(sl)));
+                        //System.out.println("hasGenericParameters: " + rmd.signature() + " -> " + lmd.signature());
+                        continue;    // avoid matching the "generic += generic" case again
+                    }
+                    if(rmd.hasSameParameters(lmd)) {
+                        if(postfix.equals("$before"))
+                            methods.add(new Pair<MethodDecl, VarAccess>(lmd, new VarAccess(sl)));
+                        else
+                            methods.add(0, new Pair<MethodDecl, VarAccess>(lmd, new VarAccess(sl)));
+                        //System.out.println("hasSameParameters: " + rmd.signature() + " -> " + lmd.signature());
+                    }
+                }
+            }
+        }
+
+        String thisStr = toString();
+        //System.out.println("modifying " + thisStr + ", #combination:" + methods.size());
+
+        // convert $assign to $after and $clear
+        boolean clear = false;
+        if(postfix.equals("$assign")) {
+            postfix = "$after";
+            clear = true;
+        }
+
+        ASTNode orig = getParent();
+        ASTNode list = orig.getParent();
+        // if the one at the right-hand side is not static, need to declare a static field for holding it.
+        if(constructor && !(so instanceof TypeAccess)) {
+            //replace so with a new variable
+            String target = lh.name() + "$" + so.toString().replace('.', '_');
+            dest.flushCache();
+            // assign so to the new variable
+            list.insertChild(new ExprStmt(new AssignSimpleExpr(new Dot(lh.createQualifiedAccess(), new VarAccess(target)), so)), list.getIndexOfChild(orig));
+            list.flushCache();
+            // add the new variable to target class
+            Modifiers mods = new Modifiers();
+            mods.addModifier(new Modifier("public"));
+            mods.addModifier(new Modifier("static"));
+            FieldDeclaration f = new FieldDeclaration(mods, rh.createQualifiedAccess(), target, new Opt());
+            lh.addMemberField(f);
+            so = new VarAccess(target);
+        }
+        ArrayList<ExprStmt> stmtList = new ArrayList<ExprStmt>();
+        Iterator<Pair<MethodDecl, VarAccess>> iter = methods.iterator();
+        while(iter.hasNext()) {
+
+            Pair<MethodDecl, VarAccess> entry = iter.next();
+
+            MethodDecl md = entry.getFirst();
+
+            //System.out.println("modifying " + thisStr + "...");
+
+            // create ${mname}(${so}.xxx$c)
+            MethodAccess method = null;
+            String mname = md.methodId(constructor);
+            //System.out.println(mname + ": " + constructor);
+
+            method = new MethodAccess(mname+postfix, new List());
+            Expr arg = rh.isInterfaceDecl() ? entry.getSecond() : new Dot(so, entry.getSecond());
+            method.addArg(arg);
+            Dot postfixCall = (Dot)dest.fullCopy();
+            postfixCall.replaceLast(method);
+            ExprStmt postfixStmt = new ExprStmt(postfixCall);
+            stmtList.add(postfixStmt);
+            list.replace(orig).with(postfixStmt);
+
+            // if it needs calling $clear
+            if(clear) {
+                method = new MethodAccess(mname+"$clear", new List());
+                // replace the last one in ${dest} with ${method}
+                Dot clearCall = (Dot)dest.fullCopy();
+                clearCall.replaceLast(method);
+                int index = list.getIndexOfChild(postfixStmt);
+                ExprStmt clearStmt = new ExprStmt(clearCall);
+                list.insertChild(clearStmt, index);
+                index = stmtList.indexOf(postfixStmt);
+                stmtList.add(index, clearStmt);
+            }
+
+        }
+        //list.flushCache();
+
+        if(constructor) {
+            if(!lh.compilationUnit().fromSource()) {
+                error("Please compile the class at the left-hand side along with this class if the left-hand side is a constructor.");
+                return;
+            }
+            Block ib = new Block();
+            for(int i=0; i<stmtList.size(); i++) {
+                ExprStmt stmt = stmtList.get(i);
+                // x.x.x.ma => this.ma
+                stmt.setExpr(new Dot(new ThisAccess("this"), ((Dot)stmt.getExpr()).extractLast()));
+                list.removeChild(stmt);
+                ib.addStmt(stmt);
+            }
+            //list.flushCache();
+            InstanceInitializer init = new InstanceInitializer();
+            init.setBlock(ib);
+            lh.addBodyDecl(init);
+            lh.flushCache();
+            //System.out.println("add an instance initializer " + init + " to " + lh.name());
+        }
+
+        list.flushCache();
+        //System.out.println("-------- lh --------");
+        //System.out.println(lh.compilationUnit());
+        //System.out.println("-------- rh --------");
+        //System.out.println(rh.compilationUnit());
+        //System.out.println("----------------");
+        //System.out.println(list.dumpTree());
+
+    }
+
+}

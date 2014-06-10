@@ -1,0 +1,131 @@
+/*
+ * Utilities for creating array handlers for a method slot.
+ */
+
+aspect UtilArray {
+
+    /*
+     * create a getter method for the slot.
+     * it initializes the array of a method slot when it is first called.
+     */
+    public void MethodDecl.createSlotGetterMethod(String mid) {
+        TypeDecl td = hostType();
+        Block b = new Block();
+        List<ParameterDeclaration> pds = new List<ParameterDeclaration>();
+        String slot = mid + "$slot";
+        String impl = mid + "$impl" + "$c";
+        // if(${slot} == null) {
+        //     ${impl} = ${generateClosureInit()};
+        //     ${slot} = new ArrayList();
+        //     ${slot}.add(${impl});
+        // }
+        // return ${slot};
+
+        Block ib = new Block();
+        // create a closure for the original method
+        // ${impl} = ${generateClosureInit()};
+        Expr implinit = new AssignSimpleExpr(new VarAccess(impl),
+                                             generateClosureInit(mid+"$impl", getTypeAccess().type(), getNumException()>0 ? getExceptionList() : null));
+        ib.addStmt(new ExprStmt(implinit));
+
+        // ${slot} = new ArrayList();
+        Expr slotinit = new AssignSimpleExpr(new VarAccess(slot),
+                                             new ClassInstanceExpr(td.lookupType("java.util", "ArrayList").createQualifiedAccess(), new List()));
+        ib.addStmt(new ExprStmt(slotinit));
+        // add the closure object for original method to list
+        //     ${slot}.add(${mid+"$impl"+"$c"});
+        MethodAccess implma = new MethodAccess("add", new List());
+        implma.addArg(new VarAccess(impl));
+        ib.addStmt(new ExprStmt(new Dot(new VarAccess(slot), implma)));
+
+        // ${slot} == null
+        EQExpr check = new EQExpr(new VarAccess(slot), new NullLiteral("null"));
+        IfStmt is = new IfStmt();
+        is.setCondition(check);
+        is.setThen(ib);
+        b.addStmt(is);
+
+        // return ${slot};
+        b.addStmt(new ReturnStmt(new VarAccess(slot)));
+
+        ClassDecl cd = td instanceof ClassDecl ? (ClassDecl)td : null;
+        if(cd != null)    cd.createMemberMethod(mid+"$getSlot", td.lookupType("java.util", "ArrayList").createQualifiedAccess(), pds, b, isStatic());
+    }
+
+    /*
+     * create a handler method to add or remove to/from the array of a method slot.
+     */
+    public void MethodDecl.createArrayHandlerMethod(String name, String getter, String pkg, String cls, boolean add, int index) {
+        TypeDecl td = hostType();
+        Block b = new Block();
+        List<ParameterDeclaration> pds = new List<ParameterDeclaration>();
+        String arg = "arg";
+        String array = "slot$tmp";
+        b.addStmt(new VariableDeclaration(td.lookupType("java.util", "ArrayList").createQualifiedAccess(), array, new MethodAccess(getter, new List())));
+        if(add) {
+            Block ib = new Block();
+            // => ${array}.add(${arg});
+            MethodAccess method = new MethodAccess("add", new List());
+            if(index >= 0)    method.addArg(new IntegerLiteral(index));
+            method.addArg(new VarAccess(arg));
+            Dot dot = new Dot(new VarAccess(array), method);
+            ib.addStmt(new ExprStmt(dot));
+            b.addStmt(ib);
+        } else {
+            // => int ${idx} = 0;
+            String idx = "idx";
+            VariableDeclaration idxdecl = new VariableDeclaration(new PrimitiveTypeAccess("int"), idx, new IntegerLiteral(0));
+            b.addStmt(idxdecl);
+
+            // => ${array}.size() > ${idx}
+            GTExpr gtsize = new GTExpr(new Dot(new VarAccess(array), new MethodAccess("size", new List())),
+                                      new VarAccess(idx));
+            Block wb = new Block();
+            // => Object ${var} = (Object) ${array}.get(${idx});
+            String var = "var";
+            wb.addStmt(MethodDecl.generateVarDeclAssignMethodStmt(var, "java.lang", "Object", array, "get", new String[]{idx}, true, td));
+
+            // => if(${var} == ${arg} || ${var}.toString().equals(${arg}.toString()))
+            EQExpr refeq = new EQExpr(new VarAccess(var), new VarAccess(arg));
+            MethodAccess eqs = new MethodAccess("equals", new List());
+            eqs.addArg(new Dot(new VarAccess(arg),
+                               new MethodAccess("toString", new List())));
+            Dot streq = new Dot(new VarAccess(var),
+                                new Dot(new MethodAccess("toString", new List()),
+                                        eqs));
+            OrLogicalExpr found = new OrLogicalExpr(refeq, streq);
+            Block tb = new Block();
+            // => ${array}.remove(${idx});
+            MethodAccess ro = new MethodAccess("remove", new List());
+            ro.addArg(new VarAccess(idx));
+            tb.addStmt(new ExprStmt(new Dot(new VarAccess(array), ro)));
+            Block eb = new Block();
+            // => ${idx} += 1;
+            eb.addStmt(new ExprStmt(new AssignPlusExpr(new VarAccess(idx), new IntegerLiteral(1))));
+            IfStmt is = new IfStmt();
+            is.setCondition(found);
+            is.setThen(tb);
+            is.setElse(eb);
+            wb.addStmt(is);
+            b.addStmt(new WhileStmt(gtsize, wb));
+        }
+        pds.add(new ParameterDeclaration(new Modifiers(), td.lookupType(pkg, cls).createQualifiedAccess(), arg));
+        td.createMemberMethod(name, new PrimitiveTypeAccess("void"), pds, (td.isClassDecl() && !isAbstract()) ? b : null, isStatic());
+    }
+
+    /*
+     * create a handler method to clear the array of a method slot.
+     */
+    public void MethodDecl.createArrayClearMethod(String name, String getter) {
+        TypeDecl td = hostType();
+        Block b = new Block();
+        List<ParameterDeclaration> pds = new List<ParameterDeclaration>();
+        String array = "slot$tmp";
+        b.addStmt(new VariableDeclaration(td.lookupType("java.util", "ArrayList").createQualifiedAccess(), array, new MethodAccess(getter, new List())));
+        // ${array}.clear();
+        Expr e = new Dot(new VarAccess(array), new MethodAccess("clear", new List()));
+        b.addStmt(new ExprStmt(e));
+        MethodDecl md = td.createMemberMethod(name, new PrimitiveTypeAccess("void"), pds, (td.isClassDecl() && !isAbstract()) ? b : null, isStatic());
+    }
+
+}

@@ -1,0 +1,27 @@
+Buildfile: dominoj/examples/build.xml
+
+sample:
+     [java] processNoErrors: sample/Shape.java
+     [java] processNoErrors: sample/Observer.java
+
+shape_aspect:
+     [java] processNoErrors: shape_aspect/Display.java
+     [java] processNoErrors: shape_aspect/Test.java
+     [java] processNoErrors: shape_aspect/Shape.java
+     [java] processNoErrors: shape_aspect/UpdateDisplay.java
+
+shape_event:
+     [java] processNoErrors: shape_event/Display.java
+     [java] processNoErrors: shape_event/Shape.java
+     [java] processNoErrors: shape_event/Test.java
+
+shape_pertarget:
+     [java] processNoErrors: shape_pertarget/Display.java
+     [java] processNoErrors: shape_pertarget/Shape.java
+     [java] processNoErrors: shape_pertarget/UpdateDisplay.java
+     [java] processNoErrors: shape_pertarget/Test.java
+
+all:
+
+BUILD SUCCESSFUL
+Total time: 5 seconds

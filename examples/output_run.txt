@@ -1,0 +1,14 @@
+Buildfile: dominoj/examples/build.xml
+
+run:
+     [echo] -------- sample --------
+     [echo] -------- shape_aspect --------
+     [java] display is refreshed.
+     [echo] -------- shape_event --------
+     [java] display is refreshed.
+     [echo] -------- shape_pertarget --------
+     [java] shape_pertarget.UpdateDisplay@76612ef6: total = 1
+     [java] shape_pertarget.UpdateDisplay@66525531: total = 1
+
+BUILD SUCCESSFUL
+Total time: 0 seconds

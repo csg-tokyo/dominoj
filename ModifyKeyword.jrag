@@ -1,0 +1,134 @@
+/*
+ * Transforming the keywords in nameCheck,
+ * or by the rewrite rules if no side-effects.
+ */
+
+aspect ModifyKeyword {
+
+    rewrite PackageAccess {
+      when(name().equals("$caller") || name().equals("$predecessor") || name().equals("$self"))
+      to VarAccess {
+        return new VarAccess(name());
+      }
+    }
+
+    public void FieldDeclaration.preprocess() {
+        if(isFinal() && !hasInit()) {
+            getModifiers().removeModifier("final");
+            flushCache();
+            System.out.println("remove the final modifier of " + hostType().name() + ":" + name());
+        }
+    }
+
+    /*
+     * TODO: cannot handle the case that a method called in the constructor uses the final field.
+     * replacing the final field with a getter which assigns it the value of the tmp field might be a solution.
+    public void VarAccess.preprocess() {
+        Variable var = decl();
+        if(var instanceof FieldDeclaration) {
+            FieldDeclaration fd = (FieldDeclaration)var;
+            // if a field is final and not initialized, it might be initialized in the constructor or initializer.
+            // only the ones initialized in the constructor should be handled.
+            if(fd.isFinal()
+               && !fd.hasInit()
+               && fd.hostType() == hostType()
+               && enclosingBodyDecl() instanceof ConstructorDecl) {
+                // create a non-final field for it
+                if(!fd.done())    fd.declareNonFinal();
+                // change the access to the non-final field
+                ASTNode parent = getParent();
+                parent.replace(this).with(new VarAccess(name()+"$tmp"));
+                parent.flushCaches();
+            }
+        }
+    }
+    */
+
+    refine NameCheck public void ArrayTypeAccess.nameCheck() {
+        flushCache();
+        refined();
+    }
+
+    /*
+     * allow using method slots and the keyword constructor.
+     */
+    refine NameCheck public void VarAccess.nameCheck() {
+        if(name().equals("constructor"))    return;
+        // avoid failing to check m().field after m() is modified
+        if(getParent() instanceof Dot) {
+            Dot dot = (Dot)getParent();
+            if(dot.getLeft() instanceof MethodAccess) {
+                MethodAccess ma = (MethodAccess)dot.getLeft();
+                flushCache();
+            }
+        }
+        if(decls().isEmpty() && (!isQualified() || !qualifier().type().isUnknown() || qualifier().isPackageAccess())) {
+            if(getParent() instanceof AssignExpr && hostType() instanceof ClassDecl) {
+                // prepend "this"
+                AssignExpr assign = (AssignExpr)getParent();
+                assign.replace(this).with(new Dot(new ThisAccess("this"), this));
+                flushCache();
+            }
+            if(qualifier().type().isClassDecl() || qualifier().type().isInterfaceDecl()) {
+                if(qualifier().type().hasMemberMethod(name()))    return;
+            }
+            System.out.println("no field named " + name());
+        }
+        refined();
+    }
+
+    /*
+    public void FieldDeclaration.declareNonFinal() {
+        System.out.println("declareNonFinal for " + hostType().name() + ":" + name() + ", type=" + type().name());
+        Modifiers mods = new Modifiers();
+        mods.addModifier(new Modifier("private"));
+        if(isStatic())    mods.addModifier(new Modifier("static"));
+        hostType().createMemberField(name()+"$tmp", type(), mods, type().getDefaultValue());
+    }
+    */
+
+    refine TypeHierarchyCheck public void MethodAccess.nameCheck() {
+
+        if(name().equals("proceed")) {
+
+            ASTNode node = this;
+            while(!(node instanceof MethodDecl)) {
+                node = node.getParent();
+            }
+            MethodDecl decl = (MethodDecl)node;
+
+            MethodAccess method = this;
+            setID("exec");
+            Access oa = hostType().lookupType("java.lang", "Object").createQualifiedAccess();
+            ArrayTypeAccess atype = new ArrayTypeAccess(oa);
+            ArrayCreationExpr creation = new ArrayCreationExpr(new ArrayTypeAccess(oa), new Opt());
+            ArrayInit init = new ArrayInit();
+            if(!decl.isVoid())    init.addInit(new VarAccess("$retval"));
+            init.addInit(new VarAccess("$caller"));
+            init.addInit(new VarAccess("$predecessor"));
+            init.addInit(new VarAccess("$self"));
+            init.addInit(new VarAccess("$proceed"));
+            init.addInit(new VarAccess("$impl"));
+            for(int i=0; i<getNumArg(); i++) {
+                init.addInit(getArg(i));
+            }
+            creation.setArrayInit(init);
+            List<Expr> list = new List<Expr>();
+            list.add(creation);
+            setArgList(list);
+
+            TypeDecl rt = decl.getTypeAccess().type();
+            Access ra = rt.isPrimitiveType() ? decl.getPrimitiveAccess(rt) : rt.createQualifiedAccess();
+            Expr closure = new VarAccess("$proceed");
+            if(decl.getNumException()==0) {
+                Access cn = hostType().lookupType("dominoj", "ClosureNoException").createQualifiedAccess();
+                closure = new ParExpr(new CastExpr(cn, closure));
+            }
+            getParent().replace(method).with(new CastExpr(ra, new Dot(closure, method)));
+            bottomupFlushCache();
+        }
+
+        refined();
+    }
+
+}

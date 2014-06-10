@@ -1,0 +1,139 @@
+/*
+ * Method slot calls are modified before starting the transformation.
+ */
+
+aspect ModifyCall {
+
+    /*
+     * modify the MethodAccess for
+     * 1. proceed.
+     * 2. add arguments for keywords.
+     * if the corresponding MethodDecl is not found, check it later.
+     */
+    refine VariableArityParametersCodegen public void MethodAccess.transformation() {
+        modifyArgs();
+        refined();
+    }
+
+    private void MethodAccess.modifyArgs() {
+
+        MethodDecl decl = decl();
+        if(!decl.isDummy())    return;
+        //System.out.println("entered for adding arguments..." + this);
+
+        int idx = 0;
+        if(!decl.isVoid()) {
+            // $retval
+            insertArg(decl.getTypeAccess().type().getDefaultValue(), idx++);
+        }
+        // $caller
+        if(inStaticContext() || inExplicitConstructorInvocation())    insertArg(new NullLiteral("null"), idx++);
+        else    insertArg(new ThisAccess("this"), idx++);
+        // $predecessor
+        if(inStaticContext() || inExplicitConstructorInvocation())    insertArg(new NullLiteral("null"), idx++);
+        else    insertArg(new ThisAccess("this"), idx++);
+        // $self
+        if(inStaticContext() || inExplicitConstructorInvocation())    insertArg(new NullLiteral("null"), idx++);
+        else    insertArg(new ThisAccess("this"), idx++);
+        // $proceed
+        insertArg(new NullLiteral("null"), idx++);
+        // $impl
+        insertArg(new NullLiteral("null"), idx++);
+
+        bottomupFlushCache();
+
+        //System.out.println("add arguments for keywords. " + this);
+
+        //System.out.println("-------- after --------");
+        if(decl().type().isUnknown()) {
+            //System.out.println("flushCache to get correct decl() of " + this);
+            // get TypeDecl
+            TypeDecl current = isQualified() ? qualifier().type() : hostType();
+            TypeDecl target = decl.hostType();
+            ArrayList<ASTNode> list = new ArrayList<ASTNode>();
+            if(target.isInnerType() && target.enclosingType().instanceOf(current)) {
+                //System.out.println("target " + target.name() + " is in current " + current.name());
+                list.add(target);
+                list.add(current.compilationUnit());
+                list.add(current);
+            } else {
+                // get the hierarchy from current to target
+                while(!target.instanceOf(current)) {    // target==current
+                    //System.out.println("target: " + target.name() + " " + target.hashCode() + (target.isClassDecl() ? " class" : " interface"));
+                    //System.out.println("current: " + current.name() + " " + current.hashCode() + (current.isClassDecl() ? " class" : " interface"));
+                    if(current.isClassDecl() && ((ClassDecl)current).hasSuperclass() && ((ClassDecl)current).superclass().instanceOf(target)) {
+                        list.add(0, current);
+                        current = ((ClassDecl)current).superclass();
+                    } else {
+                        Iterator iter = current instanceof ClassDecl ? ((ClassDecl)current).interfacesIterator()
+                                                                     : ((InterfaceDecl)current).superinterfacesIterator();
+                        while(iter.hasNext()) {
+                            TypeDecl td = (TypeDecl)iter.next();
+                            if(td.instanceOf(target)) {
+                                list.add(0, current);
+                                current = td;
+                                // several interfaces extends the same interface?
+                                break;
+                            }
+                        }
+                    }
+                }
+                list.add(0, current);
+            }
+            // flushCache all TypeDecl in the hierarchy
+            for(int i=0; i<list.size(); i++) {
+                ASTNode node = list.get(i);
+                //System.out.println("flushCache: " + (node instanceof CompilationUnit ? ((CompilationUnit)node).pathName() : ((TypeDecl)node).name()));
+                node.flushCache();
+            }
+            flushCache();
+
+            if(decl().type().isUnknown()) {
+                System.out.println("decl() is still unknown!");
+                return;
+            }
+            //System.out.println("decl() of " + this + " is " + decl().signature());
+        }
+        //System.out.println("^^^^^^^^ after ^^^^^^^^");
+    }
+
+    /*
+    public boolean ASTNode.isCascadedCall() {
+        if(!(getParent() instanceof Dot))    return false;
+        Dot dot = (Dot)getParent();
+        if(this == dot.getRight() && dot.getLeft() instanceof MethodAccess) {
+            return true;
+        }
+        return dot.isCascadedCall();
+    }
+    */
+
+    refine MethodSignature15 eq MethodDecl.moreSpecificThan(MethodDecl m) {
+        if(!isParameterModified() || !m.isParameterModified()) {
+            return refined(m);
+        }
+
+        if(!isVariableArity() && !m.isVariableArity()) {
+            if(getNumParameter() == 0) {
+                return false;
+            }
+            for(int i = getNumAdditionalParameter(); i < getNumParameter(); i++) {
+                if(!getParameter(i).type().instanceOf(m.getParameter(i).type())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        int num = Math.max(getNumParameter(), m.getNumParameter()) - getNumAdditionalParameter();
+        for(int i = getNumAdditionalParameter(); i < num; i++) {
+            TypeDecl t1 = i < getNumParameter() - 1 ? getParameter(i).type() : getParameter(getNumParameter()-1).type().componentType();
+            TypeDecl t2 = i < m.getNumParameter() - 1 ? m.getParameter(i).type() : m.getParameter(m.getNumParameter()-1).type().componentType();
+            if(!t1.instanceOf(t2)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+}

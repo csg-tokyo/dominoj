@@ -1,0 +1,269 @@
+/*
+ * Method declarations are modified for method slots when collectErrors.
+ */
+
+aspect ModifyMethod {
+
+    /*
+     *  allow declaring non-abstract method without body as empty slot
+     */
+    refine NameCheck public void MethodDecl.nameCheck() {
+        if(!isAbstract() && !hasBlock()) {
+            Block empty = new Block();
+            if(!isVoid())    empty.addStmt(new ReturnStmt(getTypeAccess().type().getDefaultValue()));
+            setBlock(empty);
+        }
+        if(!done())    modifyParms();
+        refined();
+    }
+
+    refine Modifiers public void TypeDecl.checkModifiers() {
+        if(!isEnumDecl()) {
+            Iterator iter = methodsIterator();
+            while(iter.hasNext()) {
+                MethodDecl md = (MethodDecl)iter.next();
+                if(!md.done()) {
+                    //System.out.println("checkModifiers of " + name() + ": modifyParms " + md.signature());
+                    md.modifyParms();
+                    flushCache();
+                }
+            }
+            if(isClassDecl()) {
+                iter = constructors().iterator();
+                while(iter.hasNext()) {
+                    ConstructorDecl cons = (ConstructorDecl)iter.next();
+                    if(!cons.done()) {
+                        //System.our.println("checkModifiers of " + name() + ": modifyParms " + cons.signature());
+                        cons.modifyParms();
+                        flushCache();
+                    }
+                }
+
+                ClassDecl cd = (ClassDecl)this;
+                while(cd.hasSuperclass()) {
+                    cd = cd.superclass();
+                    cd.flushCache();
+                }
+            }
+        }
+        refined();
+    }
+
+    public void MethodDeclSubstituted.modifyParms() {
+        if(!sourceMethodDecl().done()) {
+            //System.out.println("modifyParms sourceMethodDecl of " + hostType().name() + ":" +  signature());
+            sourceMethodDecl().modifyParms();
+        }
+    }
+    /*
+     * transform a method into a method slot.
+     * 1. check and import the necessary packages.
+     * 2. add parameters for keywords.
+     * 3. copy the method declaration to a new method $impl.
+     * 4. create a closure for the method body (the default closure).
+     * 5. create a closure for the method slot itself.
+     * 6. prepare an array and its handler methods for the method slot.
+     * 7. append the default closure to the method slot in the initializer.
+     * 8. iterate and execute the closures in the method slot.
+     */
+    public void MethodDecl.modifyParms() {
+
+        //System.out.println("check parameters for keywords. " + hostType().name() + ":" + signature());
+        //System.out.println(parent.dumpTree());
+        //System.out.println("----" + signature());
+        //System.out.println(getBlock());
+        //System.out.println("----" + signature());
+
+        boolean hasExceptions = getNumException()>0;
+        String closure = hasExceptions ? "Closure" : "ClosureNoException";
+        TypeDecl td = hostType();
+        TypeDecl ctype = td.lookupType("dominoj", "Closure");
+
+        //System.out.println("GenericMethodDecl?" + (this instanceof GenericMethodDecl) + ", MethodDeclSubstituted?" + (this instanceof MethodDeclSubstituted) + ", isMethodSlot?" + isMethodSlot() + ", generated?" + generated + ", isDummy?" + isDummy());
+        if(!name().endsWith("$impl")
+           && !td.instanceOf(ctype)
+           && !td.isEnumDecl()
+           && !(name().equals("main") && isStatic())
+           && isMethodSlot()
+           && !generated
+           && !(!td.compilationUnit().fromSource() && isParameterModified())
+           && !isDummy()) {
+
+            td.importPkgs();
+
+            //ClassDecl cd = td instanceof ClassDecl ? (ClassDecl)td : null;
+            //System.out.println("Class: " + cd.name() + " " +  cd.hashCode());
+            //System.out.println("Method: " + name() + " " + hashCode());
+            //System.out.println("entered for adding parameters..." + td.name() + ":" + signature());
+
+            MethodDecl nmd = fullCopy();
+
+            TypeDecl type = getTypeAccess().type();
+            String rvar = null;
+            int idx = 0;
+            if(!isVoid()) {
+                // add parameter $retval
+                nmd.insertParameter(new ParameterDeclaration(new Modifiers(), type.createQualifiedAccess(), "$retval"),  idx++);
+                rvar = "$retval";
+            }
+            // add parameter $caller, $predecessor, $self, $proceed, and $impl
+            TypeDecl otype = td.lookupType("java.lang", "Object");
+            nmd.insertParameter(new ParameterDeclaration(new Modifiers(), otype.createQualifiedAccess(), "$caller"),     idx++);
+            nmd.insertParameter(new ParameterDeclaration(new Modifiers(), otype.createQualifiedAccess(), "$predecessor"),idx++);
+            nmd.insertParameter(new ParameterDeclaration(new Modifiers(), otype.createQualifiedAccess(), "$self"),       idx++);
+            nmd.insertParameter(new ParameterDeclaration(new Modifiers(), ctype.createQualifiedAccess(), "$proceed"),    idx++);
+            nmd.insertParameter(new ParameterDeclaration(new Modifiers(), ctype.createQualifiedAccess(), "$impl"),       idx++);
+
+            nmd.flushCache();
+
+            setAnnotation(lookupType("dominoj", "Dummy"), true);
+            flushCache();
+            td.addMethodDecl(nmd);
+            td.flushCache();
+
+            if(td.isClassDecl() || td.isInterfaceDecl()) {
+
+                // copy only visibility modifiers and static
+                Modifiers mods = new Modifiers();
+                if(isPublic())            mods.addModifier(new Modifier("public"));
+                else if(isProtected())    mods.addModifier(new Modifier("protected"));
+                else                      mods.addModifier(new Modifier("private"));
+                if(isStatic())            mods.addModifier(new Modifier("static"));
+
+                // id for overridden methods
+                String mid = nmd.methodId();
+                // id for non-overridden methods
+                String sid = nmd.methodId(false, true);
+
+                if(td.isClassDecl() && !isAbstract()) {
+                    // rename original method
+                    String implid = sid + "$impl";
+                    MethodDecl imd = nmd.fullCopy();
+                    imd.setID(implid);
+                    imd.setModifiers(mods);
+                    td.addMethodDecl(imd);
+                    td.flushCache();
+
+                    // create a closure for the method
+                    td.createMemberField(sid+"$c", "dominoj", "Closure", mods.fullCopy(),
+                                         nmd.generateClosureInit(nmd.name(), type, hasExceptions ? getExceptionList() : null));
+
+                    // create a closure for the original method.  it is assigned in the iterator
+                    td.createMemberField(sid+"$impl"+"$c", "dominoj", "Closure", mods.fullCopy(), new NullLiteral("null"));
+
+                    // prepare an array to store closure objects
+                    String list = sid + "$slot";
+                    td.createMemberField(list, "java.util", "ArrayList", mods.fullCopy(), new NullLiteral("null"));
+
+                    // create iterator which does the initialization when it is first called.
+                    // initializing it in the instance initializer cannot handle the case that
+                    // the overriding method is called in the constructor of its superclass.
+                    nmd.createSlotGetterMethod(sid); 
+                }
+
+                // create array handlers
+                String getter = sid + "$getSlot";
+                nmd.createArrayHandlerMethod(mid+"$after",  getter, "dominoj", "Closure", true, -1);
+                nmd.createArrayHandlerMethod(mid+"$before", getter, "dominoj", "Closure", true, 0);
+                nmd.createArrayHandlerMethod(mid+"$remove", getter, "dominoj", "Closure", false, -1);
+                nmd.createArrayClearMethod(  mid+"$clear",  getter);
+
+                if(td.isClassDecl() && !isAbstract()) {
+                    Block mb = new Block();
+
+                    // add invocation code
+                    List<Stmt> invocation = nmd.generateInvocationStmts(sid, hasExceptions ? getExceptionList() : null);
+                    for(int i=0; i<invocation.getNumChild(); i++) {
+                        mb.addStmt(invocation.getChild(i));
+                    }
+
+                    nmd.setBlock(mb);
+
+                    Block empty = new Block();
+                    if(!isVoid())    empty.addStmt(new ReturnStmt(getTypeAccess().type().getDefaultValue()));
+                    setBlock(empty);
+                    flushCaches();
+                }
+
+                td.flushCache();
+            }
+
+            nmd.setAnnotation(lookupType("dominoj", "MethodSlot"), true);
+            nmd.flushCaches();
+
+            //System.out.println("---->" + td.name() + ":" + nmd.signature() + " " + nmd.isMethodSlot());
+            //System.out.println("---->" + td.name() + ":" + signature() + " " + isDummy());
+            //System.out.println(mb);
+            //System.out.println("----" + signature());
+            //System.out.println(td.compilationUnit());
+
+        }
+    }
+    refine GenericsCodegen public void MethodDecl.transformation() {
+        if(!isDummy())    refined();
+    }
+    refine public void EnumDecl.addBodyDecl(BodyDecl node) {
+        if(node instanceof MethodDecl) {
+            ((MethodDecl)node).generated = true;
+        }
+        refined(node);
+    }
+
+    /* Enum-related handlings are defined as lazy, but they are flushed by their hostType. */
+    private HashMap TypeDecl.enumMap = null;
+    public Object TypeDecl.getEnum(ASTNode source, String name) {
+        ArrayList key = new ArrayList(2);
+        key.add(source);
+        key.add(name);
+        if(enumMap == null || !enumMap.containsKey(key))    return null;
+        return enumMap.get(key);
+    }
+    public void TypeDecl.addEnum(ASTNode source, String name, Object decl) {
+        ArrayList key = new ArrayList(2);
+        key.add(source);
+        key.add(name);
+        if(enumMap == null)    enumMap = new HashMap();
+        enumMap.put(key, decl);
+    }
+    refine EnumsCodegen eq TypeDecl.createEnumMethod(TypeDecl enumDecl) {
+        MethodDecl m = (MethodDecl)getEnum(enumDecl, "method");
+        if(m != null) return m;
+        m = refined(enumDecl);
+        m.generated = true;
+        addEnum(enumDecl, "method", m);
+        return m;
+    }
+    refine EnumsCodegen eq TypeDecl.createEnumArray(TypeDecl enumDecl) {
+        FieldDeclaration f = (FieldDeclaration)getEnum(enumDecl, "array");
+        if(f != null) return f;
+        f = refined(enumDecl);
+        addEnum(enumDecl, "array", f);
+        return f;
+    }
+    refine EnumsCodegen eq TypeDecl.createEnumIndex(EnumConstant e) {
+        Integer i = (Integer)getEnum(e, "index");
+        if(i != null) return i;
+        i = refined(e);
+        addEnum(e, "index", new Integer(i));
+        return i;
+    }
+
+    /* after the cache of a TypeDecl is flushed, its arrayType might be created twice and fail to be compared */
+    private TypeDecl TypeDecl.arrayTypeDecl = null;
+    refine GenericsArrays eq TypeDecl.arrayType() {
+        if(arrayTypeDecl == null) {
+            arrayTypeDecl = refined();
+        }
+        return arrayTypeDecl;
+    }
+
+    refine InnerClasses public void TypeDecl.addAccessor(ASTNode source, String name, ASTNode accessor) {
+        refined(source, name, accessor);
+        if(accessor instanceof MethodDecl) {
+            MethodDecl md = (MethodDecl)accessor;
+            //System.out.println("TypeDecl.addAccessor: " + md.signature());
+            md.generated = true;
+        }
+    }
+
+}

@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<project name="testcases" default="all">
+
+    <property name="DominoJ" value=".."/>
+    <property name="dominoj" value=".."/>
+
+    <target name="all" depends="caller,component,constructor,decorator,dynamic,extend,fib,generic,predecessor,priv,proceed,proxy,retval,state,supercall,template"/>
+
+    <target name="caller">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="caller/Z.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="caller/Y.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="caller/X.java"/>
+        </java>
+    </target>
+
+    <target name="component">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="component/Component.java"/>
+        </java>
+    </target>
+
+    <target name="constructor">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="constructor/Shape.java constructor/Observer.java"/>
+        </java>
+    </target>
+
+    <target name="decorator">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="decorator/Component.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="decorator/Decorator.java"/>
+        </java>
+    </target>
+
+    <target name="dynamic">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="dynamic/Base.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="dynamic/Derived.java"/>
+        </java>
+    </target>
+
+    <target name="extend">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="extend/Component.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="extend/Shape.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="extend/Observer.java"/>
+        </java>
+    </target>
+
+    <target name="fib">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="fib/Fibonacci.java fib/Cache.java"/>
+        </java>
+    </target>
+
+    <target name="generic">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="generic/Figure.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="generic/Screen.java"/>
+        </java>
+    </target>
+
+    <target name="predecessor">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="predecessor/Shape.java predecessor/Move.java"/>
+        </java>
+    </target>
+
+    <target name="priv">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="priv/Subject.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="priv/Observer.java"/>
+        </java>
+    </target>
+
+    <target name="proceed">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="proceed/Observer.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="proceed/Shape.java"/>
+        </java>
+    </target>
+
+    <target name="proxy">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="proxy/Image.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="proxy/ImageProxy.java"/>
+        </java>
+    </target>
+
+    <target name="retval">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="retval/Subject.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="retval/Observer.java"/>
+        </java>
+    </target>
+
+    <target name="state">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="state/QueueState.java state/QueueEmpty.java state/QueueNormal.java state/QueueFull.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="state/Queue.java state/UpdateQueueState.java"/>
+        </java>
+    </target>
+
+    <target name="supercall">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="supercall/Parent.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="supercall/Child.java"/>
+        </java>
+    </target>
+
+    <target name="template">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="template/Fancy.java template/View.java template/FancyView.java"/>
+        </java>
+    </target>
+
+
+    <target name="run">
+        <echo message="-------- caller --------"/>
+        <java classpath="${dominoj}:." classname="caller.X" fork="true"/>
+        <echo message="-------- component --------"/>
+        <java classpath="${dominoj}:." classname="component.Component" fork="true"/>
+        <echo message="-------- constructor --------"/>
+        <java classpath="${dominoj}:." classname="constructor.Observer" fork="true"/>
+        <echo message="-------- decorator --------"/>
+        <java classpath="${dominoj}:." classname="decorator.Decorator" fork="true"/>
+        <echo message="-------- dynamic --------"/>
+        <java classpath="${dominoj}:." classname="dynamic.Derived" fork="true"/>
+        <echo message="-------- extend --------"/>
+        <java classpath="${dominoj}:." classname="extend.Shape" fork="true"/>
+        <echo message="-------- fib --------"/>
+        <java classpath="${dominoj}:." classname="fib.Cache" fork="true"/>
+        <echo message="-------- generic --------"/>
+        <java classpath="${dominoj}:." classname="generic.Screen" fork="true"/>
+        <echo message="-------- predecessor --------"/>
+        <java classpath="${dominoj}:." classname="predecessor.Shape" fork="true"/>
+        <echo message="-------- priv --------"/>
+        <java classpath="${dominoj}:." classname="priv.Observer" fork="true"/>
+        <echo message="-------- proceed --------"/>
+        <java classpath="${dominoj}:." classname="proceed.Shape" fork="true"/>
+        <echo message="-------- proxy --------"/>
+        <java classpath="${dominoj}:." classname="proxy.ImageProxy" fork="true"/>
+        <echo message="-------- retval --------"/>
+        <java classpath="${dominoj}:." classname="retval.Observer" fork="true"/>
+        <echo message="-------- state --------"/>
+        <java classpath="${dominoj}:." classname="state.Queue" fork="true"/>
+        <echo message="-------- supercall --------"/>
+        <java classpath="${dominoj}:." classname="supercall.Child" fork="true"/>
+        <echo message="-------- template --------"/>
+        <java classpath="${dominoj}:." classname="template.FancyView" fork="true"/>
+    </target>
+
+
+    <target name="clean">
+        <delete>
+            <fileset dir="." includes="**/*.class"/>
+        </delete>
+    </target>
+
+</project>

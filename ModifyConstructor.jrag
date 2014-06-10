@@ -1,0 +1,152 @@
+/*
+ * Constructor declarations are modified for method slots when collectErrors.
+ */
+
+aspect ModifyConstructor {
+
+    refine NameCheck public void ConstructorDecl.nameCheck() {
+        if(!done())    modifyParms();
+        refined();
+    }
+
+    /*
+     * transform a constructor method into a constructor method slot.
+     * 1. move the method body to the $impl method,
+     *    and create a closure for it (the default closure).
+     * 2. prepare an array and its handler methods for the method slot.
+     * 3. append the default closure to the method slot in the initializer.
+     * 4. add parameters for keywords.
+     * 5. iterate and execute the closures in the method slot.
+     */
+    public void ConstructorDecl.modifyParms() {
+
+        boolean hasExceptions = getNumException()>0;
+        String closure = hasExceptions ? "Closure" : "ClosureNoException";
+        TypeDecl td = hostType();
+        TypeDecl ctype = td.lookupType("dominoj", "Closure");
+
+        if(td.isClassDecl() && !td.isEnumDecl() && !td.isAnonymous()) {
+
+            //ClassDecl cd = td instanceof ClassDecl ? (ClassDecl)td : null;
+            //System.out.println("modify parameters for the constructor of class: " + td.name());
+
+            if(isMethodSlot() && !generated) {
+
+                td.importPkgs();
+
+                // create $impl method fisrt
+                MethodDecl md = generateMethodDecl();
+                td.addMethodDecl(md);
+                TypeDecl type = md.getTypeAccess().type();
+
+                // add parameter $caller, $predecessor, $self, $proceed, and $impl
+                TypeDecl otype = td.lookupType("java.lang", "Object");
+                md.insertParameter(new ParameterDeclaration(new Modifiers(), otype.createQualifiedAccess(), "$caller"),      0);
+                md.insertParameter(new ParameterDeclaration(new Modifiers(), otype.createQualifiedAccess(), "$predecessor"), 1);
+                md.insertParameter(new ParameterDeclaration(new Modifiers(), otype.createQualifiedAccess(), "$self"),        2);
+                md.insertParameter(new ParameterDeclaration(new Modifiers(), ctype.createQualifiedAccess(), "$proceed"),     3);
+                md.insertParameter(new ParameterDeclaration(new Modifiers(), ctype.createQualifiedAccess(), "$impl"),        4);
+                md.flushCache();
+
+                // id for overridden methods
+                String mid = md.methodId(true, false);
+                // id for non-overridden methods
+                String sid = md.methodId(true, true);
+                String implid = sid + "$impl";
+
+                // create a closure for the original method
+                td.createMemberField(sid+"$impl"+"$c", "dominoj", "Closure", md.getModifiers(), new NullLiteral("null"));
+
+                // prepare an array to store closure objects
+                td.createMemberField(sid+"$slot", "java.util", "ArrayList", md.getModifiers(), new NullLiteral("null"));
+
+                // create iterator which does the initialization when it is first called.
+                md.createSlotGetterMethod(sid); 
+
+                // create array handlers
+                String getter = sid + "$getSlot";
+                md.createArrayHandlerMethod(mid+"$after",  getter, "dominoj", "Closure", true, -1);
+                md.createArrayHandlerMethod(mid+"$before", getter, "dominoj", "Closure", true, 0);
+                md.createArrayHandlerMethod(mid+"$remove", getter, "dominoj", "Closure", false, -1);
+                md.createArrayClearMethod(   mid+"$clear", getter);
+
+                Block mb = new Block();
+
+                // give $caller, $predecessor, $self, $proceed, and $impl
+                mb.addStmt(new VariableDeclaration(otype.createQualifiedAccess(), "$caller",      new NullLiteral("null")));
+                mb.addStmt(new VariableDeclaration(otype.createQualifiedAccess(), "$predecessor", new NullLiteral("null")));
+                mb.addStmt(new VariableDeclaration(otype.createQualifiedAccess(), "$self",        new ThisAccess("this")));
+                mb.addStmt(new VariableDeclaration(ctype.createQualifiedAccess(), "$proceed",     new NullLiteral("null")));
+                mb.addStmt(new VariableDeclaration(ctype.createQualifiedAccess(), "$impl",        new VarAccess(sid+"$impl$c")));
+
+                // add invocation code
+                List<Stmt> invocation = md.generateInvocationStmts(sid, hasExceptions ? getExceptionList() : null);
+                for(int i=0; i<invocation.getNumChild(); i++) {
+                    mb.addStmt(invocation.getChild(i));
+                }
+
+                /*
+                // assign all final fields
+                for(int i=0; i<td.getNumBodyDecl(); i++) {
+                    BodyDecl bd = td.getBodyDecl(i);
+                    if(bd instanceof FieldDeclaration) {
+                        FieldDeclaration fd = (FieldDeclaration)bd;
+                        String tmp = fd.name() + "$tmp";
+                        if(fd.isFinal() && !fd.hasInit() && td.hasField(tmp)) {
+                            VarAccess orig = new VarAccess(fd.name());
+                            VarAccess nonf = new VarAccess(tmp);
+                            Expr left  = fd.isStatic() ? orig : new Dot(new ThisAccess("this"), orig);
+                            Expr right = fd.isStatic() ? nonf : new Dot(new ThisAccess("this"), nonf);
+                            mb.addStmt(new ExprStmt(new AssignSimpleExpr(left, right)));
+                        }
+                    }
+                }
+                */
+
+                setBlock(mb);
+
+                generated = true;
+                flushCaches();
+
+                // rename $impl method
+                md.setID(implid);
+                md.flushCaches();
+
+                //System.out.println("---->" + td.name() + ":" + md.signature() + " " + md.isMethodSlot());
+                //System.out.println(mb);
+                //System.out.println("----" + signature());
+                //System.out.println(td.compilationUnit());
+
+            }
+        }
+    }
+    public boolean ConstructorDecl.generated  = false;
+
+    /*
+     * generate a temporary method declaration for the constructor declaration.
+     */
+    public MethodDecl ConstructorDecl.generateMethodDecl() {
+        Modifiers mods = new Modifiers();
+        mods.addModifier(new Modifier("public"));
+        return new MethodDecl(mods, new PrimitiveTypeAccess("void"), name(), getParameterList().fullCopy(), getExceptionList().fullCopy(), new Opt(getBlock().fullCopy()));
+    }
+
+    public boolean ConstructorDecl.isMethodSlot() {
+        boolean ret = true;
+
+        if(isVariableArity())    return false;
+        // check annotation
+        TypeDecl td = hostType();
+        TypeDecl type = lookupType("dominoj", "MethodSlot");
+        if(hasAnnotation(type)) {
+            ret = getAnnotation(type);
+            //System.out.println("hasAnnotation: " + td.name() + "." + name() + " " + ret);
+            return ret;
+        }
+        if(!td.compilationUnit().fromSource())    return false;
+
+        //System.out.println("isMethodSlot: " + td.name() + "." + name() + " " + ret);
+        return ret;
+    }
+
+}

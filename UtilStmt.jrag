@@ -1,0 +1,370 @@
+/*
+ * Utilities for generating statements.
+ */
+
+aspect UtilStmt {
+
+    public List<Stmt> MethodDecl.generateInvocationStmts(String mid, List<Access> exceptions) {
+        TypeDecl td = hostType();
+        boolean hasExceptions = exceptions!=null;
+        List<Stmt> invocation = new List<Stmt>();
+
+        // => Object[] ${args} = new Object[${pnum}];
+        int pnum = getNumParameter();
+        String args = mid + "$args";
+        invocation.add(MethodDecl.generateNewArrayStmt("java.lang", "Object", args, pnum, td));
+        // => ${args}[i] = ${args[i]};
+        for(int i=0; i<pnum; i++) {
+            invocation.add(MethodDecl.generateArrayAssignStmt(args, i, getParameter(i).getID()));
+        }
+
+        // => Iterator ${iter} = ${mid+"$getSlot"}().iterator();
+        String iter = mid + "$ii";
+        invocation.add(MethodDecl.generateIteratorStmt(iter, mid+"$getSlot", td));
+
+        // beginning of while stmt
+        Block wb = new Block();
+
+        // => Closure ${closure} = (Closure) ${iter}.next();
+        String closure = mid + "$ic";
+        wb.addStmt(MethodDecl.generateVarDeclAssignMethodStmt(closure, "dominoj", hasExceptions ? "Closure" : "ClosureNoException", iter, "next", new String[]{}, true, td));
+
+        // assign $predecessor, $self, $proceed, and $impl
+        int diff = type().isVoid() ? 0 : 1;
+        if(!(name().equals("main") && isStatic())) {
+            // => ${args}[1+diff] = ${args}[2+diff];  
+            invocation.add(new ExprStmt(new AssignSimpleExpr(new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(1+diff))),
+                                                             new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(2+diff))))));
+            // => ${args}[2+diff] = this;
+            invocation.add(new ExprStmt(new AssignSimpleExpr(new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(2+diff))),
+                                                             isStatic() ? new NullLiteral("null") : new ThisAccess("this"))));
+            // => ${args}[3+diff] = ${args}[4+diff];
+            invocation.add(new ExprStmt(new AssignSimpleExpr(new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(3+diff))),
+                                                             new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(4+diff))))));
+            // => ${args}[4+diff] = ${mid+"$impl$c"};
+            invocation.add(new ExprStmt(new AssignSimpleExpr(new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(4+diff))),
+                                                             new VarAccess(mid+"$impl$c"))));
+        }
+
+        MethodAccess exec = new MethodAccess("exec", new List());
+        exec.addArg(new VarAccess(args));
+        Stmt execStmt = null;
+        if(!type().isVoid()) {
+            // => ${args}[0] = ${closure}.exec(${args});
+            execStmt = new ExprStmt(new AssignSimpleExpr(new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(0))),
+                                                         new Dot(new VarAccess(closure), exec)));
+        } else {
+            // => ${closure}.exec(${args});
+            execStmt = new ExprStmt(new Dot(new VarAccess(closure), exec));
+        }
+
+        // cast exception
+        if(hasExceptions) {
+            // sort exception
+            Comparator comp = new Comparator() {
+                public int compare(Object arg0, Object arg1) {
+                    TypeDecl t0 = ((Access)arg0).type();
+                    TypeDecl t1 = ((Access)arg1).type();
+                    int ret = 0;
+                    if(t0.instanceOf(t1))    ret = -1;
+                    else if(t1.instanceOf(t0))    ret = 1;
+                    //System.out.println("compare: " + t0.name() + " " + ret + " " + t1.name());
+                    return ret;
+                }
+            };
+            ArrayList<Access> sorted = new ArrayList<Access>();
+            for(int i=0; i<exceptions.getNumChild(); i++) {
+                sorted.add(exceptions.getChild(i));
+            }
+            //System.out.println("before");
+            //for(int i=0; i<sorted.size(); i++)    System.out.println(sorted.get(i));
+            Collections.sort(sorted, comp);
+            //System.out.println("after");
+            //for(int i=0; i<sorted.size(); i++)    System.out.println(sorted.get(i));
+
+            TryStmt tryStmt = new TryStmt();
+            Block tb = new Block();
+            tb.addStmt(execStmt);
+            tryStmt.setBlock(tb);
+            for(int i=0; i<sorted.size(); i++) {
+                String e = mid + "$e";
+                ASTNode t = sorted.get(i);
+                Block bb = new Block();
+                bb.addStmt(new ThrowStmt(new CastExpr((Access)t.fullCopy(), new VarAccess(e))));
+                BasicCatch bc = new BasicCatch(new ParameterDeclaration(i==(sorted.size()-1) ? td.lookupType("java.lang", "Exception").createQualifiedAccess()
+                                                                                             : (Access)t.fullCopy(),
+                                                                        e),
+                                               bb);
+                tryStmt.addCatchClause(bc);
+            }
+            wb.addStmt(tryStmt);
+        } else {
+            wb.addStmt(execStmt);
+        }
+
+        // end of while stmt
+
+        WhileStmt ws = new WhileStmt(new Dot(new VarAccess(iter), new MethodAccess("hasNext", new List())), wb);
+        invocation.add(ws);
+
+        // add return statement
+        if(!type().isVoid()) {
+            Expr ret = new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(0)));
+            if(type().isPrimitiveType()) {
+                ret = new CastExpr(MethodDecl.getPrimitiveAccess(type()), ret);
+            } else {
+                ret = new CastExpr(type().createQualifiedAccess(), ret);
+            }
+            invocation.add(new ReturnStmt(ret));
+        }
+
+        return invocation;
+    }
+
+    public Expr MethodDecl.generateClosureInit(String id, TypeDecl rtype, List<Access> exceptions) {
+        TypeDecl td = hostType();
+        boolean hasExceptions = exceptions!=null;
+        Access access = td.lookupType("dominoj", hasExceptions ? "Closure" : "ClosureNoException").createQualifiedAccess();
+        ClassInstanceExpr init = new ClassInstanceExpr(access, new List());
+        AnonymousDecl anonymous = new AnonymousDecl(new Modifiers(), "Anonymous", new List());
+        Iterator<MemberDecl> iter = generateClosureMember(id, rtype, exceptions).iterator();
+        while(iter.hasNext()) {
+            anonymous.addBodyDecl(iter.next());
+        }
+        init.setTypeDecl(anonymous);
+        return init;
+    }
+    public ArrayList<MemberDecl> MethodDecl.generateClosureMember(String id, TypeDecl rtype, List<Access> exceptions) {
+        ArrayList<MemberDecl> members = new ArrayList<MemberDecl>();
+
+        TypeDecl td = hostType();
+        String args = methodId() + "$args";
+        String pnum = id + "$pnum";
+        boolean hasExceptions = exceptions!=null;
+        MethodAccess ma = generateClosureExpr(id, hasExceptions, true);
+        Modifiers mods = new Modifiers();
+        mods.addModifier(new Modifier("public"));
+        TypeDecl type = td.lookupType("java.lang", "Object");
+        MethodDecl exec = new MethodDecl(mods, type.createQualifiedAccess(), "exec", new List(), new List(), new Opt());
+        if(hasExceptions)    exec.setExceptionList(exceptions);
+        exec.addParameter(new ParameterDeclaration(new Modifiers(), new ArrayTypeAccess(type.createQualifiedAccess()), args));
+        exec.generated = true;
+        Block mb = new Block();
+        if(isGeneric() && !id.endsWith("$impl")) {
+            mb.addStmt(MethodDecl.generateVarDeclAssignExprStmt(pnum, "java.lang", "Integer",
+                                                                new SubExpr(new Dot(new VarAccess(args), new VarAccess("length")),
+                                                                            isVoid() ? new IntegerLiteral(5) : new IntegerLiteral(6)),
+                                                                false, td));
+            mb.addStmt(MethodDecl.generateNewArrayStmt("java.lang", "Object", args+"$g", pnum, td));
+            mb.addStmt(MethodDecl.generateForAssignArrayStmt(args+"$g", args, isVoid() ? 5 : 6, new VarAccess(pnum), td));
+        }
+        Expr expr = ma;
+        if(!td.isAnonymous()) {
+            Access right = isStatic() ? ma : new Dot(new ThisAccess("this"), ma);
+            expr = new Dot(td.createQualifiedAccess(), right);
+        }
+        if(rtype.isVoid()) {
+            mb.addStmt(new ExprStmt(expr));
+            mb.addStmt(new ReturnStmt(new NullLiteral("null")));
+        } else {
+            mb.addStmt(new ReturnStmt(expr));
+        }
+        exec.setBlock(mb);
+        //System.out.println(mb);
+        members.add(exec);
+        return members;
+    }
+
+    public MethodAccess MethodDecl.generateClosureExpr(String id, boolean hasExceptions, boolean idargs) {
+        TypeDecl td = hostType();
+        String args = idargs ? methodId() + "$args" : "args";
+        MethodAccess ma = new MethodAccess(id, new List());
+        if(isGeneric() && !id.endsWith("$impl")) {    // generic case
+            int index = 0;
+            if(!isVoid()) {
+                TypeDecl pt = getParameter(index).type();
+                Access pa;
+                if(pt.isPrimitiveType()) {
+                    pa = MethodDecl.getPrimitiveAccess(pt);
+                } else {
+                    pa = pt.createQualifiedAccess();
+                }
+                ma.addArg(new CastExpr(pa, new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(index++)))));
+            }
+            ma.addArg(new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(index++))));
+            ma.addArg(new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(index++))));
+            ma.addArg(new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(index++))));
+            TypeDecl ctype = td.lookupType("dominoj", hasExceptions ? "Closure" : "ClosureNoException");
+            ma.addArg(new CastExpr(ctype.createQualifiedAccess(),
+                                   new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(index++)))));
+            ma.addArg(new CastExpr(ctype.createQualifiedAccess(),
+                                   new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(index++)))));
+            ma.addArg(new VarAccess(args+"$g"));
+        } else {    // non-generic case
+            int idx = 0;
+            if(!idargs) {    // for $lc
+                if(!isVoid())
+                    ma.addArg(new CastExpr(getTypeAccess().type().createQualifiedAccess(), new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(idx++)))));
+                TypeDecl otype = td.lookupType("java.lang", "Object");
+                ma.addArg(new CastExpr(otype.createQualifiedAccess(), new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(idx++)))));
+                ma.addArg(new CastExpr(otype.createQualifiedAccess(), new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(idx++)))));
+                ma.addArg(new CastExpr(otype.createQualifiedAccess(), new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(idx++)))));
+                TypeDecl ctype = td.lookupType("dominoj", "Closure");
+                ma.addArg(new CastExpr(ctype.createQualifiedAccess(), new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(idx++)))));
+                ma.addArg(new CastExpr(ctype.createQualifiedAccess(), new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(idx++)))));
+            }
+            for(int i=0; i<getNumParameter(); i++) {
+                TypeDecl pt = getParameter(i).type();
+                Access pa;
+                if(pt.isPrimitiveType()) {
+                    pa = MethodDecl.getPrimitiveAccess(pt);
+                } else {
+                    pa = pt.createQualifiedAccess();
+                }
+                ma.addArg(new CastExpr(pa, new Dot(new VarAccess(args), new ArrayAccess(new IntegerLiteral(idx+i)))));
+            }
+        }
+        return ma;
+    }
+
+    static public VariableDeclaration MethodDecl.generateIteratorStmt(String iter, String call, TypeDecl host) {
+        return MethodDecl.generateIteratorStmt(iter, new MethodAccess(call, new List()), host);
+    }
+    static public VariableDeclaration MethodDecl.generateIteratorStmt(String iter, Expr expr, TypeDecl host) {
+        Access type = host.lookupType("java.util", "Iterator").createQualifiedAccess();
+        return new VariableDeclaration(type, iter, new Dot(expr, new MethodAccess("iterator", new List())));
+    }
+
+    static public VariableDeclaration MethodDecl.generateNewArrayStmt(String pkg, String cls, String name, String size, TypeDecl host) {
+        Access type = host.lookupType(pkg, cls).createQualifiedAccess();
+        ArrayTypeAccess atype = new ArrayTypeAccess(type);
+        Expr expr = new ArrayCreationExpr(new ArrayTypeWithSizeAccess(type, new VarAccess(size)), new Opt());
+        return new VariableDeclaration(atype, name, expr);
+    }
+    static public VariableDeclaration MethodDecl.generateNewArrayStmt(String pkg, String cls, String name, int size, TypeDecl host) {
+        Access type = host.lookupType(pkg, cls).createQualifiedAccess();
+        ArrayTypeAccess atype = new ArrayTypeAccess(type);
+        Expr expr;
+        if(size > 0) {
+            expr = new ArrayCreationExpr(new ArrayTypeWithSizeAccess(type, new IntegerLiteral(size)), new Opt());
+        } else {
+            expr = new NullLiteral("null");
+        }
+        return new VariableDeclaration(atype, name, expr);
+    }
+
+    static public ExprStmt MethodDecl.generateArrayAssignStmt(String dest, int i, String source) {
+        Dot l = new Dot(new VarAccess(dest), new ArrayAccess(new IntegerLiteral(i)));
+        Expr r;
+        if(source == null)    r = new NullLiteral("null");
+        else    r = new VarAccess(source);
+        AssignSimpleExpr expr = new AssignSimpleExpr(l, r);
+        return new ExprStmt(expr);
+    }
+
+    static public VariableDeclaration MethodDecl.generateVarDeclAssignExprStmt(String name, String pkg, String cls, Expr expr, boolean cast, TypeDecl host) {
+        Access type = host.lookupType(pkg, cls).createQualifiedAccess();
+        if(cast) {
+            Access ctype = host.lookupType(pkg, cls).createQualifiedAccess();
+            return new VariableDeclaration(type, name, new CastExpr(ctype, expr));
+        }
+        else {
+            return new VariableDeclaration(type, name, expr);
+        }
+    }
+
+    static public VariableDeclaration MethodDecl.generateVarDeclAssignMethodStmt(String name, String pkg, String cls, String owner, String method, String[] args, boolean cast, TypeDecl host) {
+        Access type = host.lookupType(pkg, cls).createQualifiedAccess();
+        MethodAccess ma = new MethodAccess(method, new List());
+        for(int i=0; i<args.length; i++) {
+            ma.addArg(new VarAccess(args[i]));
+        }
+        Dot r = new Dot(new VarAccess(owner), ma);
+        if(cast) {
+            Access ctype = host.lookupType(pkg, cls).createQualifiedAccess();
+            return new VariableDeclaration(type, name, new CastExpr(ctype, r));
+        }
+        else {
+            return new VariableDeclaration(type, name, r);
+        }
+    }
+
+    static public ForStmt MethodDecl.generateForAssignArrayStmt(String dest, String source, int shift, Expr max, TypeDecl host) {
+        String i = "i";
+        ForStmt fs = new ForStmt();
+        Stmt init = new VariableDeclaration(host.lookupType("java.lang", "Integer").createQualifiedAccess(), i, new IntegerLiteral(0));
+        fs.addInitStmt(init);
+        Expr cond = new LTExpr(new VarAccess(i), max);
+        fs.setCondition(cond);
+        fs.addUpdateStmt(new ExprStmt(new PostIncExpr(new VarAccess(i))));
+        Block fb = new Block();
+        Dot l = new Dot(new VarAccess(dest), new ArrayAccess(new VarAccess(i)));
+        Dot r = new Dot(new VarAccess(source), new ArrayAccess(new AddExpr(new VarAccess(i), new IntegerLiteral(shift))));
+        AssignSimpleExpr assign = new AssignSimpleExpr(l, r);
+        fb.addStmt(new ExprStmt(assign));
+        fs.setStmt(fb);
+        //System.out.println(fb);
+        return fs;
+    }
+
+    /*
+     * create a statement which declares a local final variable initialized with expr,
+     * and insert the statement before curpos.
+     */
+    public VarAccess TypeDecl.createLocalFinalVariable(Expr expr, Stmt curpos) {
+        Expr last = expr instanceof Dot ? ((Dot)expr).extractLast() : expr;
+        Access type = last.type().createQualifiedAccess();
+        String id = name() + "$lf" + getFinalVarId();
+        int index = curpos.getParent().getIndexOfChild(curpos);
+        Modifiers mods = new Modifiers();
+        mods.addModifier(new Modifier("final"));
+        VariableDeclaration vd = new VariableDeclaration(mods, type, id, new Opt(expr.fullCopy()));
+        curpos.getParent().insertChild(vd, index);
+        curpos.getParent().flushCache();
+        return new VarAccess(id);
+    }
+    private int TypeDecl.finalVarIdIndex = 0;
+    public int TypeDecl.getFinalVarId() {
+        return finalVarIdIndex++;
+    }
+
+    /*
+     * generate an anonymous closure.
+     */
+    public VariableDeclaration Expr.generateClosureSimple(TypeDecl td, String id, Expr retStr, boolean ret) {
+        // declare an anonymous closure
+        String args = "args";
+        Access access = td.lookupType("dominoj", "ClosureNoException").createQualifiedAccess();
+        ClassInstanceExpr init = new ClassInstanceExpr(access, new List());
+        // override "Object exec(Object[] arg)" in the closure
+        Modifiers mods = new Modifiers();
+        mods.addModifier(new Modifier("public"));
+        TypeDecl type = td.lookupType("java.lang", "Object");
+        MethodDecl exec = new MethodDecl(mods, type.createQualifiedAccess(), "exec", new List(), new List(), new Opt());
+        exec.addParameter(new ParameterDeclaration(new Modifiers(), new ArrayTypeAccess(type.createQualifiedAccess()), args));
+        exec.generated = true;
+        Block mb = new Block();
+        if(ret) {
+            mb.addStmt(new ReturnStmt((Expr)fullCopy()));
+        } else {
+            mb.addStmt(new ExprStmt((Expr)fullCopy()));
+            mb.addStmt(new ReturnStmt(new Dot(new VarAccess("args"), new ArrayAccess(new IntegerLiteral(0)))));
+        }
+        exec.setBlock(mb);
+        // override "String toString()" to identify a closure for removal
+        mods = new Modifiers();
+        mods.addModifier(new Modifier("public"));
+        type = td.lookupType("java.lang", "String");
+        MethodDecl tostr = new MethodDecl(mods, type.createQualifiedAccess(), "toString", new List(), new List(), new Opt());
+        tostr.generated = true;
+        mb = new Block();
+        mb.addStmt(new ReturnStmt((Expr)retStr.fullCopy()));
+        tostr.setBlock(mb);
+        AnonymousDecl anonymous = new AnonymousDecl(new Modifiers(), "Anonymous", new List());
+        anonymous.addBodyDecl(exec);
+        anonymous.addBodyDecl(tostr);
+        init.setTypeDecl(anonymous);
+        return new VariableDeclaration(access, id, init);
+    }
+
+}

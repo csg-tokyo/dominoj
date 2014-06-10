@@ -1,0 +1,104 @@
+Buildfile: dominoj/testcases/build.xml
+
+run:
+     [echo] -------- caller --------
+     [java] [x] $caller: caller.X@27573872, $predecessor: caller.X@27573872, $self: caller.X@27573872
+     [java] [y] $caller: caller.X@27573872, $predecessor: caller.X@27573872, $self: caller.Y@4f3ad88b
+     [java] [z] $caller: caller.X@27573872, $predecessor: caller.Y@4f3ad88b, $self: caller.Z@205eb650
+     [echo] -------- component --------
+     [java] parent: redraw.
+     [java] child 1: redraw.
+     [java] child 2: redraw.
+     [java] parent: redraw.
+     [java] child 1: redraw.
+     [java] child 2: redraw.
+     [echo] -------- constructor --------
+     [java] the constructor of Shape is executed.
+     [java] an instance of Shape is constructed.
+     [echo] -------- decorator --------
+     [java] decorator.Component: draw
+     [echo] -------- dynamic --------
+     [java] Derived
+     [java] handler
+     [echo] -------- extend --------
+     [java] Shape: setX 10
+     [java] Component: test 10
+     [echo] -------- fib --------
+     [java] fib(40) = 102334155
+     [echo] -------- generic --------
+     [java] attach sizeChecker to object 169174794
+     [java] attach refresh to object 169174794
+     [java] attach sizeChecker to object 52414130
+     [java] sizeChecker: 800, 600
+     [java] refresh.
+     [java] refresh.
+     [java] sizeChecker: 640, 600
+     [echo] -------- predecessor --------
+     [java] It starts moving.
+     [java] $caller = null
+     [java] $predecessor = predecessor.Shape@4471dfd7
+     [java] moving
+     [java] It is moved.
+     [java] $caller = null
+     [java] $predecessor = predecessor.Shape@4471dfd7
+     [java] moved
+     [echo] -------- priv --------
+     [java] priv.Observer: a
+     [java] priv.Observer: b
+     [java] priv.Subject: a
+     [java] priv.Observer: c
+     [echo] -------- proceed --------
+     [java] Observer: update 10
+     [java] Shape: setX 1
+     [java] Observer: update after proceed 10
+     [echo] -------- proxy --------
+     [java] -- no proxy --
+     [java] load anImageFileName
+     [java] draw
+     [java] getExtent
+     [java] -- use proxy --
+     [java] fake loading
+     [java] load anImageFileName
+     [java] draw
+     [java] getExtent
+     [java] return cached extent
+     [echo] -------- retval --------
+     [java] -- default value --
+     [java] retval.Observer: a false
+     [java] retval.Observer: b 0
+     [java] retval.Observer: c null
+     [java] -- from predecessor --
+     [java] retval.Subject: a false
+     [java] retval.Observer: a true
+     [java] retval.Observer: d true
+     [java] retval.Subject: b 0
+     [java] retval.Observer: b 1
+     [java] retval.Observer: d 1
+     [java] retval.Subject: c null
+     [java] retval.Observer: c retval.Observer@1753d79c
+     [java] retval.Observer: d retval.Observer@1704ebb
+     [echo] -------- state --------
+     [java] -- insertion --
+     [java] UpdateQueueState: emptyToNormal
+     [java] insertion 1 -> true
+     [java] insertion 2 -> true
+     [java] UpdateQueueState: normalToFull
+     [java] insertion 3 -> true
+     [java] insertion 4 -> false
+     [java] -- removal --
+     [java] UpdateQueueState: fullToNormal
+     [java] removal 1 -> true
+     [java] removal 2 -> true
+     [java] UpdateQueueState: normalToEmpty
+     [java] removal 3 -> true
+     [java] removal 4 -> false
+     [echo] -------- supercall --------
+     [java] Parent.test
+     [java] Parent.test2
+     [java] Child.test
+     [echo] -------- template --------
+     [java] Fancy: drawBorder
+     [java] View: drawContent
+
+BUILD SUCCESSFUL
+Total time: 1 second

@@ -1,0 +1,76 @@
+Buildfile: dominoj/testcases/build.xml
+
+caller:
+     [java] processNoErrors: caller/Z.java
+     [java] processNoErrors: caller/Y.java
+     [java] processNoErrors: caller/X.java
+
+component:
+     [java] processNoErrors: component/Component.java
+
+constructor:
+     [java] processNoErrors: constructor/Shape.java
+     [java] processNoErrors: constructor/Observer.java
+
+decorator:
+     [java] processNoErrors: decorator/Component.java
+     [java] processNoErrors: decorator/Decorator.java
+
+dynamic:
+     [java] processNoErrors: dynamic/Base.java
+     [java] processNoErrors: dynamic/Derived.java
+
+extend:
+     [java] processNoErrors: extend/Component.java
+     [java] processNoErrors: extend/Shape.java
+     [java] processNoErrors: extend/Observer.java
+
+fib:
+     [java] processNoErrors: fib/Fibonacci.java
+     [java] processNoErrors: fib/Cache.java
+
+generic:
+     [java] processNoErrors: generic/Figure.java
+     [java] processNoErrors: generic/Screen.java
+
+predecessor:
+     [java] processNoErrors: predecessor/Move.java
+     [java] processNoErrors: predecessor/Shape.java
+
+priv:
+     [java] processNoErrors: priv/Subject.java
+     [java] processNoErrors: priv/Observer.java
+
+proceed:
+     [java] processNoErrors: proceed/Observer.java
+     [java] processNoErrors: proceed/Shape.java
+
+proxy:
+     [java] processNoErrors: proxy/Image.java
+     [java] processNoErrors: proxy/ImageProxy.java
+
+retval:
+     [java] processNoErrors: retval/Subject.java
+     [java] processNoErrors: retval/Observer.java
+
+state:
+     [java] processNoErrors: state/QueueFull.java
+     [java] processNoErrors: state/QueueNormal.java
+     [java] processNoErrors: state/QueueState.java
+     [java] processNoErrors: state/QueueEmpty.java
+     [java] processNoErrors: state/Queue.java
+     [java] processNoErrors: state/UpdateQueueState.java
+
+supercall:
+     [java] processNoErrors: supercall/Parent.java
+     [java] processNoErrors: supercall/Child.java
+
+template:
+     [java] processNoErrors: template/View.java
+     [java] processNoErrors: template/Fancy.java
+     [java] processNoErrors: template/FancyView.java
+
+all:
+
+BUILD SUCCESSFUL
+Total time: 23 seconds

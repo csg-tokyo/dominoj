@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<project name="examples" default="all">
+
+    <property name="DominoJ" value=".."/>
+    <property name="dominoj" value=".."/>
+
+    <target name="all" depends="sample,shape_aspect,shape_event,shape_pertarget"/>
+
+    <target name="sample">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="sample/Shape.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="sample/Observer.java"/>
+        </java>
+    </target>
+
+    <target name="shape_aspect">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="shape_aspect/Display.java shape_aspect/Shape.java shape_aspect/UpdateDisplay.java shape_aspect/Test.java"/>
+        </java>
+    </target>
+
+    <target name="shape_event">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="shape_event/Display.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="shape_event/Shape.java"/>
+        </java>
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="shape_event/Test.java"/>
+        </java>
+    </target>
+
+    <target name="shape_pertarget">
+        <java classpath="${DominoJ}" classname="JavaCompiler" fork="true">
+            <arg line="shape_pertarget/Display.java shape_pertarget/Shape.java shape_pertarget/UpdateDisplay.java shape_pertarget/Test.java"/>
+        </java>
+    </target>
+
+
+    <target name="run">
+        <echo message="-------- sample --------"/>
+        <java classpath="${dominoj}:." classname="sample.Observer" fork="true"/>
+        <echo message="-------- shape_aspect --------"/>
+        <java classpath="${dominoj}:." classname="shape_aspect.Test" fork="true"/>
+        <echo message="-------- shape_event --------"/>
+        <java classpath="${dominoj}:." classname="shape_event.Test" fork="true"/>
+        <echo message="-------- shape_pertarget --------"/>
+        <java classpath="${dominoj}:." classname="shape_pertarget.Test" fork="true"/>
+    </target>
+
+
+    <target name="clean">
+        <delete>
+            <fileset dir="." includes="**/*.class"/>
+        </delete>
+    </target>
+
+</project>

@@ -1,0 +1,291 @@
+/*
+ * Utilities for general purpose.
+ */
+
+import java.util.logging.*;
+
+aspect UtilGeneral {
+
+    public class Pair<A, B> {
+        private A first;
+        private B second;
+
+        public Pair(A f, B s) {
+            first = f;
+            second = s;
+        };
+
+        public A getFirst() {
+            return first;
+        };
+
+        public B getSecond() {
+            return second;
+        };
+    }
+
+
+    /*
+     * allow using the annotation to specify a method should be transformed or not.
+     */
+    public boolean Modifiers.hasAnnotation(TypeDecl type) {
+        return annotation(type) != null;
+    }
+    public boolean Modifiers.getAnnotation(TypeDecl type) {
+        Annotation a = annotation(type);
+        if(a != null && a.getNumElementValuePair() == 1 && a.getElementValuePair(0).getName().equals("value")) {
+            ElementValue value = a.getElementValuePair(0).getElementValue();
+            if(value instanceof ElementConstantValue) {
+                if(value.type().isBoolean())
+                    return ((ElementConstantValue)value).getExpr().constant().booleanValue();
+                if(value.type().isInt())
+                    return ((ElementConstantValue)value).getExpr().constant().intValue()==1;
+            }
+        }
+        return false;
+    }
+    public void Modifiers.setAnnotation(TypeDecl type, boolean b) {
+        Annotation a = new Annotation();
+        a.setID("annotation");
+        a.setAccess(type.createQualifiedAccess());
+        a.addElementValuePair(new ElementValuePair("value", new ElementConstantValue(new BooleanLiteral(b))));
+        insertModifier(a, 0);
+    }
+    public boolean      MethodDecl.hasAnnotation(TypeDecl type)            { return getModifiers().hasAnnotation(type); }
+    public boolean ConstructorDecl.hasAnnotation(TypeDecl type)            { return getModifiers().hasAnnotation(type); }
+    public boolean      MethodDecl.getAnnotation(TypeDecl type)            { return getModifiers().getAnnotation(type); }
+    public boolean ConstructorDecl.getAnnotation(TypeDecl type)            { return getModifiers().getAnnotation(type); }
+    public void         MethodDecl.setAnnotation(TypeDecl type, boolean b) { getModifiers().setAnnotation(type, b); }
+    public void    ConstructorDecl.setAnnotation(TypeDecl type, boolean b) { getModifiers().setAnnotation(type, b); }
+
+    public void Modifiers.insertModifier(Modifier m, int i) {
+        List<Modifier> list = getModifierList();
+        list.insertChild(m, i);
+        flushCache();
+    }
+
+    public void Modifiers.removeModifier(String id) {
+        int index = -1;
+        List<Modifier> list = getModifierList();
+        for(int i=0; i<list.getNumChild(); i++) {
+            if(list.getChild(i).getID().equals(id)) {
+                index = i;
+            }
+        }
+        if(index > -1) {
+            list.removeChild(index);
+            flushCaches();
+        }
+    }
+
+
+    /* for MethodDecl */
+    static public Access MethodDecl.getPrimitiveAccess(TypeDecl type) {
+        Access p = null;
+        if(type.isByte())            p = type.lookupType("java.lang", "Byte").createQualifiedAccess();
+        else if(type.isShort())      p = type.lookupType("java.lang", "Short").createQualifiedAccess();
+        else if(type.isInt())        p = type.lookupType("java.lang", "Integer").createQualifiedAccess();
+        else if(type.isLong())       p = type.lookupType("java.lang", "Long").createQualifiedAccess();
+        else if(type.isFloat())      p = type.lookupType("java.lang", "Float").createQualifiedAccess();
+        else if(type.isDouble())     p = type.lookupType("java.lang", "Double").createQualifiedAccess();
+        else if(type.isBoolean())    p = type.lookupType("java.lang", "Boolean").createQualifiedAccess();
+        else if(type.isChar())       p = type.lookupType("java.lang", "Character").createQualifiedAccess();
+        else    System.out.println("cannot match primitive type " + type.name());
+        return p;
+    }
+
+    public Expr TypeDecl.getDefaultValue() {
+        if(isChar())    return new CharacterLiteral("\u0000");
+        else if(isNumericType())    return isPrimitiveType() ? new CastExpr(createQualifiedAccess(),
+                                                                            new IntegerLiteral(0))
+                                                                       : new IntegerLiteral(0);
+        else if(isBoolean())    return new BooleanLiteral(false);
+        else    return new NullLiteral("null");
+    }
+
+    public void MethodDecl.insertParameter(ParameterDeclaration node, int i) {
+        List<ParameterDeclaration> list = (parent == null || state == null) ? getParameterListNoTransform() : getParameterList();
+        list.insertChild(node, i);
+    }
+
+    private int MethodDecl.closureIdIndex = 0;
+    public int MethodDecl.getClosureId() {
+        return closureIdIndex++;
+    }
+
+
+    /* done() */
+    /*
+    private boolean FieldDeclaration.done = false;
+    public boolean FieldDeclaration.done() {
+        if(done) return true;
+        done = true;
+        return false;
+    }
+    */
+
+    private boolean MethodDecl.done = false;
+    public boolean MethodDecl.done() {
+        if(done) return true;
+        done = true;
+        return false;
+    }
+
+    private boolean ConstructorDecl.done = false;
+    public boolean ConstructorDecl.done() {
+        if(done) return true;
+        done = true;
+        return false;
+    }
+
+
+    /* for ClassDecl */
+    public void ClassDecl.createEmptyConstructor() {
+        Modifiers mods = new Modifiers();
+        mods.addModifier(new Modifier("public"));
+        ConstructorDecl cons = new ConstructorDecl(mods, name(), new List(), new List(), new Opt(), new Block());
+        addBodyDecl(cons);
+        flushCache();
+        //System.out.println("createEmptyConstructor: " + cons);
+    }
+
+    public ConstructorDecl ClassDecl.getConstructor() {
+        for(int i = 0; i < getNumBodyDecl(); i++) {
+          if(getBodyDecl(i) instanceof ConstructorDecl) {
+            return (ConstructorDecl)getBodyDecl(i);
+          }
+        }
+        return null;
+    }
+
+    public void ClassDecl.generateMethodsByConstructors() {
+        if(fakeGenerated)    return;
+        //System.out.println("generateMethodsByConstructors for " + name());
+        Iterator iter = constructors().iterator();
+        while(iter.hasNext()) {
+            ConstructorDecl c = (ConstructorDecl)iter.next();
+            // generate fake methods
+            MethodDecl m = c.generateMethodDecl();
+            addMethodDecl(m);
+        }
+        flushCache();
+        fakeGenerated = true;
+    }
+    public boolean ClassDecl.fakeGenerated  = false;
+
+
+    /* for TypeDecl */
+    public MethodDecl TypeDecl.createMemberMethod(String name, Access type, List<ParameterDeclaration> params, Block b, boolean is) {
+        Modifiers mods = new Modifiers();
+        mods.addModifier(new Modifier("public"));
+        if(is)    mods.addModifier(new Modifier("static"));
+        if(b == null && isClassDecl())    mods.addModifier(new Modifier("abstract"));
+        MethodDecl md = new MethodDecl(mods, type, name, new List(), new List(), new Opt());
+        // print the name of the method created by the compiler.
+        //Access sys = hostType().lookupType("java.lang", "System").createQualifiedAccess();
+        //MethodAccess print = new MethodAccess("println", new List());
+        //print.addArg(new StringLiteral(name));
+        //b.insertStmt(new ExprStmt(new Dot(sys, new Dot(new VarAccess("out"), print))), 0);
+        md.setParameterList(params);
+        if(b == null)    md.setBlockOpt(new Opt());
+        else    md.setBlock(b);
+        addMethodDecl(md);
+        flushCache();
+        //System.out.println("createMemberMethod: " + b);
+        return md;
+    }
+
+    public boolean TypeDecl.hasMemberMethod(String name) {
+        Iterator iter = methodsIterator();
+        while(iter.hasNext()) {
+            MethodDecl m = (MethodDecl)iter.next();
+            if(m.name().equals(name))    return true;
+        }
+        return false;
+    }
+
+    public ArrayList<MethodDecl> TypeDecl.getMemberMethods(String name) {
+        ArrayList<MethodDecl> list = new ArrayList<MethodDecl>();
+        if(name.equals("constructor"))    name = name();
+        Iterator iter = methodsIterator();
+        while(iter.hasNext()) {
+            MethodDecl m = (MethodDecl)iter.next();
+            if(m.name().equals(name))    list.add(m);
+        }
+        return list;
+    }
+
+    public boolean FieldDeclaration.generated  = false;
+    public void TypeDecl.createMemberField(String name, String pkg, String cls, Modifiers mods, Expr init) {
+        createMemberField(name, lookupType(pkg, cls), mods, init);
+    }
+    public void TypeDecl.createMemberField(String name, TypeDecl type, Modifiers mods, Expr init) {
+        FieldDeclaration f = new FieldDeclaration(mods.fullCopy(), type.createQualifiedAccess(), name, new Opt(init));
+        f.generated = true;
+        getBodyDeclList().insertChild(f, 0);
+        flushCache();
+        //System.out.println("createMemberField: " + name);
+    }
+
+    public void TypeDecl.importPkgs() {
+        CompilationUnit cu = hostType().compilationUnit();
+        if(cu.importedTypes("ArrayList").size() <= 0 && cu.importedTypesOnDemand("ArrayList").size() <= 0) {
+            Access arraylist = hostType().lookupType("java.util", "ArrayList").createQualifiedAccess();
+            cu.addImportDecl(new SingleTypeImportDecl(arraylist));
+            cu.flushCache();
+        }
+        if(cu.importedTypes("Closure").size() <= 0 && cu.importedTypesOnDemand("Closure").size() <= 0) {
+            Access closure = hostType().lookupType("dominoj", "Closure").createQualifiedAccess();
+            cu.addImportDecl(new SingleTypeImportDecl(closure));
+            cu.flushCache();
+        }
+        if(cu.importedTypes("ClosureNoException").size() <= 0 && cu.importedTypesOnDemand("ClosureNoException").size() <= 0) {
+            Access cne = hostType().lookupType("dominoj", "ClosureNoException").createQualifiedAccess();
+            cu.addImportDecl(new SingleTypeImportDecl(cne));
+            cu.flushCache();
+        }
+        if(cu.importedTypes("MethodSlot").size() <= 0 && cu.importedTypesOnDemand("MethodSlot").size() <= 0) {
+            Access methodslot = hostType().lookupType("dominoj", "MethodSlot").createQualifiedAccess();
+            cu.addImportDecl(new SingleTypeImportDecl(methodslot));
+            cu.flushCache();
+        }
+    }
+
+
+    public void MethodAccess.insertArg(Expr node, int i) {
+        List<Expr> list = (parent == null || state == null) ? getArgListNoTransform() : getArgList();
+        list.insertChild(node, i);
+    }
+
+    public void Block.insertStmt(Stmt node, int index) {
+        List<Stmt> list = (parent == null || state == null) ? getStmtListNoTransform() : getStmtList();
+        list.insertChild(node, index);
+    }
+
+    public void Access.bottomupFlushCache() {
+        // bottom-up flushCache. otherwise, its parent such as AddExpr will be UnknownType.
+        ASTNode parent = this;
+        while(!(parent instanceof CompilationUnit)) {
+            parent.flushCache();
+            parent = parent.getParent();
+        }
+        //System.out.println("flushCache up to " + ((CompilationUnit)parent).pathName());
+    }
+
+    public boolean ASTNode.removeChild(ASTNode node) {
+        int found = -1;
+        for(int i=0; i<getNumChild(); i++) {
+            if(getChild(i) == node) {
+                found = i;
+                break;
+            }
+        }
+        if(found >= 0) {
+            removeChild(found);
+            flushCache();
+            return true;
+        }
+        return false;
+    }
+
+}

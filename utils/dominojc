@@ -1,2 +1,2 @@
 #!/bin/bash
-java -cp ~/devel/DominoJ JavaCompiler $@
+java -cp ~/devel/dominoj JavaCompiler $@

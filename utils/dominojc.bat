@@ -1,3 +1,3 @@
 @echo off
 
-java -cp C:\devel\DominoJ JavaCompiler %1
+java -cp C:\devel\dominoj JavaCompiler %1

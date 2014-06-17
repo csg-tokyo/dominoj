@@ -11,32 +11,50 @@ The source code of this project is licensed under the modified BSD License
 (please see the LICENSE file for the full text).
 
 
-build steps:
-  1. checkout DominoJ from GitHub.
-     "git clone https://github.com/yungyu/dominoj.git dominoj"
-  2. checkout JastAddJ from its SVN repository.
-     "svn checkout http://svn.cs.lth.se/svn/jastadd-oxford/projects/branches/JastAddJ-stable/ jastaddj"
-  2. build DominoJ using ant
-     "cd dominoj && ant"
+### build steps
 
-create jar files:
-  1. "ant jar" for building DominoJCompiler.jar and dominoj.jar
-  2. "ant source" for building dominoj-compiler-src.jar
+* checkout DominoJ from GitHub.
 
-examples:
-  1. "cd examples && ant"
-  2. "ant run" for testing
+  `git clone https://github.com/yungyu/dominoj.git dominoj`
 
-testcases:
-  1. "cd testcases && ant"
-  2. "ant run" for testing
+* checkout JastAddJ from its SVN repository.
 
-to compile a source file written in DominoJ:
-     "java -jar DominoJCompiler.jar MyClass.java"
+  `svn checkout http://svn.cs.lth.se/svn/jastadd-oxford/projects/branches/JastAddJ-stable/ jastaddj`
+
+* build DominoJ using ant
+
+  `cd dominoj && ant`
+
+### create jar files
+
+* `ant jar` for building DominoJCompiler.jar and dominoj.jar
+
+* `ant source` for building dominoj-compiler-src.jar
+
+### examples
+
+* `cd examples && ant`
+
+* `ant run` for testing
+
+### testcases
+
+* `cd testcases && ant`
+
+* `ant run` for testing
+
+### to compile a source file written in DominoJ
+
+  `java -jar DominoJCompiler.jar MyClass.java`
+
   or:
-     "java -cp path_of_dominoj JavaCompiler MyClass.java"
-  or let dominojc could be found in your $PATH and then:
-     "dominojc MyClass.java"
 
-the execution is the same as other Java programs.
-     "java -cp dominoj.jar:. MyClass"
+  `java -cp path_of_dominoj JavaCompiler MyClass.java`
+
+  or let dominojc could be found in your $PATH and then:
+
+  `dominojc MyClass.java`
+
+### the execution is the same as other Java programs
+
+  `java -cp dominoj.jar:. MyClass`

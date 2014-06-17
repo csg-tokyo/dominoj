@@ -168,12 +168,12 @@
 
 <!-- build binaries -->
 <target name="jar" depends="build">
-  <jar destfile="DominoJCompiler.jar" basedir="." includes="**/*.class" excludes="anttask/**,examples/**,testcases/**,utils/**">
+  <jar destfile="DominoJCompiler.jar" basedir="." includes="**/*.class,LICENSE,README.md" excludes="anttask/**,examples/**,testcases/**,utils/**">
     <manifest>
       <attribute name="Main-Class" value="JavaCompiler"/>
     </manifest>
   </jar>
-  <jar destfile="dominoj.jar" basedir="." includes="dominoj/*.class"/>
+  <jar destfile="dominoj.jar" basedir="." includes="dominoj/*.class,LICENSE,README.md"/>
 </target>
 
 <!-- build a source distribution -->
@@ -182,12 +182,14 @@
       <!-- DominoJ language extension -->
                 <fileset dir=".">
         <!-- include source file -->
-                    <include name="${DominoJ}/*.jrag"/>
-                    <include name="${DominoJ}/dominoj/*.java"/>
+                    <include name="*.jrag"/>
+                    <include name="dominoj/*.java"/>
         <!-- include buildfile -->
-                    <include name="${DominoJ}/*.xml"/>
+                    <include name="*.xml"/>
+        <!-- include license -->
+                    <include name="LICENSE"/>
         <!-- include readme -->
-                    <include name="${DominoJ}/README.md"/>
+                    <include name="README.md"/>
                 </fileset>
       <manifest>
       </manifest>

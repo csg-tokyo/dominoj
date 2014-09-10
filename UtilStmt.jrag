@@ -361,18 +361,20 @@ aspect UtilStmt {
             mb.addStmt(new ReturnStmt(new Dot(new VarAccess("args"), new ArrayAccess(new IntegerLiteral(0)))));
         }
         exec.setBlock(mb);
-        // override "String toString()" to identify a closure for removal
-        mods = new Modifiers();
-        mods.addModifier(new Modifier("public"));
-        type = td.lookupType("java.lang", "String");
-        MethodDecl tostr = new MethodDecl(mods, type.createQualifiedAccess(), "toString", new List(), new List(), new Opt());
-        tostr.generated = true;
-        mb = new Block();
-        mb.addStmt(new ReturnStmt((Expr)retStr.fullCopy()));
-        tostr.setBlock(mb);
         AnonymousDecl anonymous = new AnonymousDecl(new Modifiers(), "Anonymous", new List());
         anonymous.addBodyDecl(exec);
-        anonymous.addBodyDecl(tostr);
+        if(retStr != null) {
+            // override "String toString()" to identify a closure for removal
+            mods = new Modifiers();
+            mods.addModifier(new Modifier("public"));
+            type = td.lookupType("java.lang", "String");
+            MethodDecl tostr = new MethodDecl(mods, type.createQualifiedAccess(), "toString", new List(), new List(), new Opt());
+            tostr.generated = true;
+            mb = new Block();
+            mb.addStmt(new ReturnStmt((Expr)retStr.fullCopy()));
+            tostr.setBlock(mb);
+            anonymous.addBodyDecl(tostr);
+        }
         init.setTypeDecl(anonymous);
         return new VariableDeclaration(access, id, init);
     }
